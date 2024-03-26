@@ -1,5 +1,3 @@
-# autocrystalprivate
-
 this is the private use version of my autocrystal shiny hunting API. It does not require a webserver or further setup.
 
 # how to run
