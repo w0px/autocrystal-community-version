@@ -15,15 +15,20 @@ in the console select the module you want to run by importing the lua script to 
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
 
-currently the following modules are ready to use:
+# modules
 
 - starters ✅
-
 softresetting for a shiny starter
 
-- wild ✅
+start a new game and move infront of the desired pokemon then start the script
+![image](https://github.com/w0px/autocrystalprivate/assets/152983879/e17e2292-a17a-485c-82b2-f67b709c171e)
 
+
+- wild ✅
 grinding wild pokemon until a shiny is encountered
+
+![image](https://github.com/w0px/autocrystalprivate/assets/152983879/5548e6e4-efc3-47e6-b334-491ed8bba01b)
+
 
 - fishing ✅
 
