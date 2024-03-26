@@ -1,6 +1,30 @@
-this is the private use version of my autocrystal shiny hunting API. It does not require a webserver or further setup.
+![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
-# how to run
+  
+this is the community use version of my autocrystal shiny hunting API. It does not require a webserver or further setup.
+
+https://github.com/w0px/w0p-autocrystal
+
+# Supported Versions:
+
+Crystal US✅ EU✅ JP✅
+
+Silver US✅ EU🟡 JP🟡
+
+Gold US✅ EU🟡 JP🟡
+
+
+# Emulator Speed
+
+100% ✅
+
+200% ✅
+
+400% ✅
+
+potentially even more ✅
+
+# How to run
 
 download BizHawk 2.91
 https://github.com/TASEmulators/BizHawk/releases/
@@ -33,13 +57,13 @@ grinding wild pokemon until a shiny is encountered
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/5548e6e4-efc3-47e6-b334-491ed8bba01b)
 
 
-- fishing ✅
+- fishing 🟡
 
-fishing for a shiny encounter
+testing state
 
-- headbutt
+- headbutt 🟡
 
-coming soon
+testing state
 
 - stationary/gift
 
@@ -51,4 +75,4 @@ coming soon
 
 - legendary roaming beasts
 
-coming soon
+not yet
