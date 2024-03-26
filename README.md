@@ -4,6 +4,8 @@ this is the private use version of my autocrystal shiny hunting API. It does not
 
 download BizHawk 2.91
 https://github.com/TASEmulators/BizHawk/releases/
+download a GSC ROM
+start the ROM in the BizHawk Emulator
 
 in the BizHawk menu select LUA Console
 
