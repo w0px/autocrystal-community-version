@@ -29,15 +29,15 @@ potentially even more ✅
 download BizHawk 2.91
 https://github.com/TASEmulators/BizHawk/releases/
 
-download a GSC ROM
+- Download a GSC ROM
 
-start the ROM in the BizHawk Emulator
+- Start the ROM in the BizHawk Emulator
 
-in the BizHawk menu select LUA Console
+- In the BizHawk menu select LUA Console
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/3f4e8e0c-d3a1-49fe-9853-f0aac4a04d2e)
 
-in the console select the module you want to run by importing the lua script to the console / a launcher will be added in the future
+- In the console select the module you want to run by importing the lua script to the console / a launcher will be added in the future
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
 
