@@ -1,7 +1,7 @@
 ![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
   
-this is the community use version of my autocrystal shiny hunting API. It does not require a webserver or further setup.
+this is the community version of my autocrystal shiny hunting API. It does not require a webserver or further setup.
 
 https://github.com/w0px/w0p-autocrystal
 
