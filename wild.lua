@@ -9,6 +9,8 @@ local shinyvalue = 0
 local printedMessage = false
 local enemy_addr
 local daytime
+local LoadBattleMenuAddr
+local EnemyWildmonInitialized
 initialX, initialY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
 mapgroup, mapnumber = memory.readbyte(0xdcb5), memory.readbyte(0xdcb6)
 local version = memory.readbyte(0x141)
@@ -18,7 +20,6 @@ local framesInDirection = 0
 local maxFramesInDirection = 1
 local highestSpeSpc = 0
 local highestAtkDef = 0
-Mem.SetRomBankAddress("Crystal")
 input = {}
 actions = {"B", "Right", "Right", "Down", "A","A"}
 currentActionIndex = 1
@@ -33,13 +34,48 @@ framesPerAction2 = 1
 if version == 0x54 then
     if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
         enemy_addr = 0xd20c
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+        Mem.SetRomBankAddress("Crystal")
     elseif region == 0x45 then
         enemy_addr = 0xd20c
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+        Mem.SetRomBankAddress("Crystal")
     elseif region == 0x4A then
         enemy_addr = 0xd23d
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+        Mem.SetRomBankAddress("Crystal")
+    end
+elseif version == 0x55 or version == 0x58 then
+    if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
+        print("EUR Gold/Silver detected")
+        enemy_addr = 0xda22
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73c5)
+        Mem.SetRomBankAddress("Gold")
+    elseif region == 0x45 then
+        print("USA Gold/Silver detected")
+        enemy_addr = 0xda22
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+        Mem.SetRomBankAddress("Gold")
+    elseif region == 0x4A then
+        print("JPN Gold/Silver detected")
+        enemy_addr = 0xd9e8
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+        Mem.SetRomBankAddress("Gold")
+    elseif region == 0x4B then
+        print("KOR Gold/Silver detected")
+        enemy_addr = 0xdb1f
+        LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
+        EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+        Mem.SetRomBankAddress("Gold")
     end
 else
-    print("Script stopped")
+    print("No valid ROM detected")
     return
 end
 
@@ -48,8 +84,6 @@ local species_addr = enemy_addr + 0x22
 local item_addr = enemy_addr - 0x05
 local daytime_addr = 0xd269
 
-local LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
-local EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
 
 function shiny(atkdef, spespc)
     if spespc == 0xAA then
@@ -73,12 +107,12 @@ end
 
 local have_battle_controls = false
 Mem.RegisterROMHook(LoadBattleMenuAddr, function()
-    --print("Battle menu loaded")
+    print("Battle menu loaded")
     have_battle_controls = true
 end, "Detect Battle Menu")
 
 Mem.RegisterROMHook(EnemyWildmonInitialized, function()
-    --print("combat started")
+    print("combat started")
     item = memory.readbyte(item_addr)
         atkdef = memory.readbyte(enemy_addr)
         spespc = memory.readbyte(enemy_addr + 1)
