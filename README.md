@@ -61,17 +61,17 @@ grinding wild pokemon until a shiny is encountered
 
 testing state
 
-- headbutt 🟡
+- headbutt 
 
-testing state
+not yet
 
 - stationary/gift
 
-coming soon
+not yet
 
 - egg
 
-coming soon
+not yet
 
 - legendary roaming beasts
 
