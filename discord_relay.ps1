@@ -1,5 +1,5 @@
 param(
-    [string]$DiscordWebhookUrl = "https://discord.com/api/webhooks/1521826264464490497/cZ_SN9ZxtkdKEapOuLQcd3vMCyAe2JKprwg4x4l4_Az6NTNcSq4KA--k148HbQNzAQuG"
+    [string]$DiscordWebhookUrl = "paste your discord webhook here"
 )
 
 Add-Type -AssemblyName System.Web
