@@ -71,7 +71,7 @@ Launch from this shortcut going forward (not the raw .exe).
 
 4. Configure the bot
 
-Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI. No URL to enter — it's hardcoded to talk to the local relay.
+Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI.
 
 
 # Modules
