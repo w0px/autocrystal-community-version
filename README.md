@@ -82,6 +82,8 @@ RAM-verified menu navigation, self-corrects on dropped inputs
 Full DV + shiny detection
 Species & held-item names (Dex + full Gen II item table)
 
+<img width="987" height="642" alt="image" src="https://github.com/user-attachments/assets/ae4483ea-b988-419d-9648-664b48afe33c" />
+
 
 ### Stop Conditions
 
