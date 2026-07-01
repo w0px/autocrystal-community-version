@@ -64,12 +64,12 @@ Double-click start_relay.bat — a console window opens and must stay running th
 
 ### 3. Point BizHawk at the relay
 
-move the start.bat file into your downloaded Bizhawk directory and double click to start the emulator
+move the DCNotifications_start.bat file into your downloaded Bizhawk directory and double click to start the emulator
 
 
 ### 4. Configure the bot
 
-Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI.
+in any module, check "Send Discord notification (shiny/stop)" in the GUI.
 
 
 # Modules
