@@ -44,14 +44,14 @@ potentially even more ✅
 
 BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
 
-1. Create a webhook
+### 1. Create a webhook
 
 
 Discord → Server Settings → Integrations → Webhooks → New Webhook
 Copy the Webhook URL
 
 
-2. Set up the relay
+### 2. Set up the relay
 
 
 Put discord_relay.ps1 and start_relay.bat in the same folder
@@ -59,9 +59,7 @@ Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
 Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
 
 
-No installs needed — just PowerShell, which ships with Windows.
-
-3. Point BizHawk at the relay
+### 3. Point BizHawk at the relay
 
 Edit your BizHawk launch shortcut's Target, appending:
 
@@ -69,7 +67,7 @@ Edit your BizHawk launch shortcut's Target, appending:
 
 Launch from this shortcut going forward (not the raw .exe).
 
-4. Configure the bot
+### 4. Configure the bot
 
 Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI.
 
@@ -78,7 +76,7 @@ Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI.
 
 ## Wild Encounter Module (wild.lua)
 
-Self-correcting, drift-proof movement (auto-detects safe directions)
+Self-correcting movement (auto-detects safe directions)
 RAM-verified menu navigation, self-corrects on dropped inputs
 Full DV + shiny detection
 Species & held-item names (Dex + full Gen II item table)
@@ -95,11 +93,9 @@ Shiny (always)
 
 ### Kill Mode
 
-Auto-fights non-targets with first move
+Auto-fights non-shinies with first move
 Species allowlist (avoid bad matchups)
 Flees if PP hits 0
-Evolution-safe (won't cancel evolutions)
-
 
 
 https://github.com/user-attachments/assets/633d66f2-3de2-486c-b88d-c53aa299ed70
@@ -115,10 +111,6 @@ Live encounter/shiny/runtime/status
 Last encounter + 8-entry history
 All settings adjustable live
 
-
-Notifications
-
-Discord Webhook notifications read setup guide
 
 
 
