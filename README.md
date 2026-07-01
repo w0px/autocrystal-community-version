@@ -84,7 +84,7 @@ Full DV + shiny detection
 Species & held-item names (Dex + full Gen II item table)
 
 
-Stop Conditions
+### Stop Conditions
 
 Perfect DVs (15/15/15/15)
 Perfect Negative DVs (0/0/0/0)
@@ -93,7 +93,7 @@ Held item (any or specific)
 Shiny (always)
 
 
-Kill Mode
+### Kill Mode
 
 Auto-fights non-targets with first move
 Species allowlist (avoid bad matchups)
