@@ -40,7 +40,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 potentially even more ✅
 
-# modules
+# Modules
 
 ## Wild Encounter Module (wild.lua)
 
@@ -65,6 +65,16 @@ Auto-fights non-targets with first move
 Species allowlist (avoid bad matchups)
 Flees if PP hits 0
 Evolution-safe (won't cancel evolutions)
+
+
+
+https://github.com/user-attachments/assets/633d66f2-3de2-486c-b88d-c53aa299ed70
+
+
+
+https://github.com/user-attachments/assets/bc844c39-1e5c-4dc0-9c40-d2bc32267d49
+
+
 
 
 Reliability
