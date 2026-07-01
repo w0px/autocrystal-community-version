@@ -1,10 +1,10 @@
 ![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
-## Pokemon Crystal Shiny Hunting Bot
+# Pokemon Crystal Shiny Hunting Bot
  
  API Project: https://github.com/w0px/w0p-autocrystal
 
-# Supported Versions:
+## Supported Versions:
 
 Crystal US✅ EU✅ JP✅
 
@@ -13,7 +13,7 @@ Silver US✅ EU🟡 JP🟡
 Gold US✅ EU🟡 JP🟡
 
 
-# How to run
+## How to run
 
 download latest BizHawk release
 https://github.com/TASEmulators/BizHawk/releases/
@@ -30,7 +30,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
 
-# Emulator Speed
+## Emulator Speed
 
 100% ✅
 
@@ -40,7 +40,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 potentially even more ✅
 
-# Discord Notifications
+## Discord Notifications
 
 BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
 
