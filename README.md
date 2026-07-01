@@ -40,6 +40,40 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 potentially even more ✅
 
+# Discord Notifications
+
+BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
+
+1. Create a webhook
+
+
+Discord → Server Settings → Integrations → Webhooks → New Webhook
+Copy the Webhook URL
+
+
+2. Set up the relay
+
+
+Put discord_relay.ps1 and start_relay.bat in the same folder
+Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
+Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
+
+
+No installs needed — just PowerShell, which ships with Windows.
+
+3. Point BizHawk at the relay
+
+Edit your BizHawk launch shortcut's Target, appending:
+
+--url_post=http://127.0.0.1:5000/ --url_get=http://127.0.0.1:5000/
+
+Launch from this shortcut going forward (not the raw .exe).
+
+4. Configure the bot
+
+Load wild.lua, check "Send Discord notification (shiny/stop)" in the GUI. No URL to enter — it's hardcoded to talk to the local relay.
+
+
 # Modules
 
 ## Wild Encounter Module (wild.lua)
@@ -77,15 +111,6 @@ https://github.com/user-attachments/assets/bc844c39-1e5c-4dc0-9c40-d2bc32267d49
 
 
 
-Reliability
-
-Top-level stuck watchdog (real time + position based)
-False-alarm filtering for encounters
-Timeout-guarded loops, no infinite hangs
-
-
-GUI
-
 Live encounter/shiny/runtime/status
 Last encounter + 8-entry history
 All settings adjustable live
@@ -98,4 +123,4 @@ Discord Webhook notifications read setup guide
 
 
 
-not yet
+
