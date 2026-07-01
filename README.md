@@ -1,9 +1,8 @@
 ![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
-  
-this is the community version of my Pokemon Crystal shiny hunting API.
-
-https://github.com/w0px/w0p-autocrystal
+ Pokemon Crystal Shiny Hunting Bot
+ 
+ API Project: https://github.com/w0px/w0p-autocrystal
 
 # Supported Versions:
 
@@ -13,16 +12,6 @@ Silver US✅ EU🟡 JP🟡
 
 Gold US✅ EU🟡 JP🟡
 
-
-# Emulator Speed
-
-100% ✅
-
-200% ✅
-
-400% ✅
-
-potentially even more ✅
 
 # How to run
 
@@ -41,18 +30,61 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
 
+# Emulator Speed
+
+100% ✅
+
+200% ✅
+
+400% ✅
+
+potentially even more ✅
+
 # modules
 
-- starters ✅
-softresetting for a shiny starter
+- Wild Encounter Module (wild.lua)
 
-start a new game and move infront of the desired pokemon then start the script
+Self-correcting, drift-proof movement (auto-detects safe directions)
+RAM-verified menu navigation, self-corrects on dropped inputs
+Full DV + shiny detection
+Species & held-item names (Dex + full Gen II item table)
 
-![image](https://github.com/w0px/autocrystalprivate/assets/152983879/e17e2292-a17a-485c-82b2-f67b709c171e)
+
+Stop Conditions
+
+Perfect DVs (15/15/15/15)
+Perfect Negative DVs (0/0/0/0)
+Specific species (ID or name)
+Held item (any or specific)
+Shiny (always)
 
 
-- wild ✅
-grinding wild pokemon until a shiny is encountered
+Kill Mode
+
+Auto-fights non-targets with first move
+Species allowlist (avoid bad matchups)
+Flees if PP hits 0
+Evolution-safe (won't cancel evolutions)
+
+
+Reliability
+
+Top-level stuck watchdog (real time + position based)
+False-alarm filtering for encounters
+Timeout-guarded loops, no infinite hangs
+
+
+GUI
+
+Live encounter/shiny/runtime/status
+Last encounter + 8-entry history
+All settings adjustable live
+
+
+Notifications
+
+Discord Webhook notifications read setup guide
+
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/5548e6e4-efc3-47e6-b334-491ed8bba01b)
 
