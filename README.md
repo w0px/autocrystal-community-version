@@ -42,7 +42,8 @@ potentially even more ✅
 
 ## Discord Notifications
 
-<img width="548" height="83" alt="image" src="https://github.com/user-attachments/assets/0e35d30b-9692-4a03-9c01-0ba3d7c32735" />
+<img width="548" height="83" alt="image" src="https://github.com/user-attachments/assets/ae4d411e-9b5d-4bf8-99cc-5cba1ac658c3" />
+
 
 
 BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
