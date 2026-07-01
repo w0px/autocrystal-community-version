@@ -1,6 +1,6 @@
 ![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
- Pokemon Crystal Shiny Hunting Bot
+## Pokemon Crystal Shiny Hunting Bot
  
  API Project: https://github.com/w0px/w0p-autocrystal
 
@@ -15,10 +15,10 @@ Gold US✅ EU🟡 JP🟡
 
 # How to run
 
-download BizHawk 2.91
+download latest BizHawk release
 https://github.com/TASEmulators/BizHawk/releases/
 
-- Download a GSC ROM
+- Download a official Crystal ROM
 
 - Start the ROM in the BizHawk Emulator
 
