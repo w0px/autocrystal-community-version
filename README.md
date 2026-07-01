@@ -61,11 +61,8 @@ Double-click start_relay.bat — a console window opens and must stay running th
 
 ### 3. Point BizHawk at the relay
 
-Edit your BizHawk launch shortcut's Target, appending:
+move the start.bat file into your downloaded Bizhawk directory and double click to start the emulator
 
---url_post=http://127.0.0.1:5000/ --url_get=http://127.0.0.1:5000/
-
-Launch from this shortcut going forward (not the raw .exe).
 
 ### 4. Configure the bot
 
