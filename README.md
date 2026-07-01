@@ -42,7 +42,7 @@ potentially even more ✅
 
 # modules
 
-- Wild Encounter Module (wild.lua)
+## Wild Encounter Module (wild.lua)
 
 Self-correcting, drift-proof movement (auto-detects safe directions)
 RAM-verified menu navigation, self-corrects on dropped inputs
@@ -86,25 +86,6 @@ Notifications
 Discord Webhook notifications read setup guide
 
 
-![image](https://github.com/w0px/autocrystalprivate/assets/152983879/5548e6e4-efc3-47e6-b334-491ed8bba01b)
 
-
-- fishing 🟡
-
-testing state
-
-- headbutt 
-
-not yet
-
-- stationary/gift
-
-not yet
-
-- egg
-
-not yet
-
-- legendary roaming beasts
 
 not yet
