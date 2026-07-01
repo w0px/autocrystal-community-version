@@ -58,7 +58,6 @@ Copy the Webhook URL
 ### 2. Set up the relay
 
 
-Put discord_relay.ps1 and start_relay.bat in the same folder
 Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
 Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
 
