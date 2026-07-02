@@ -43,6 +43,7 @@ potentially even more ✅
 ## Discord Notifications
 
 <img width="548" height="83" alt="image" src="https://github.com/user-attachments/assets/ae4d411e-9b5d-4bf8-99cc-5cba1ac658c3" />
+<img width="558" height="72" alt="image" src="https://github.com/user-attachments/assets/2591013d-c415-4e48-b85a-292edf95ccac" />
 
 
 
