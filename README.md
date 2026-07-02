@@ -80,6 +80,10 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 <img width="617" height="147" alt="image" src="https://github.com/user-attachments/assets/e3a24d3c-8313-4932-a01d-2f9476cca13d" />
 
+- in the launcher select a module you want to run
+<img width="463" height="405" alt="image" src="https://github.com/user-attachments/assets/8359c386-c4a6-47a1-bcca-45ea3dcd2b3c" />
+
+
 
 
 ## Emulator Speed
