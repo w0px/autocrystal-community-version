@@ -1,5 +1,6 @@
 param(
     [string]$DiscordWebhookUrl = "paste your discord webhook here"
+    # for more info check the docs https://github.com/w0px/autocrystal-Shiny-Hunting-Bot#discord-notifications
 )
 
 Add-Type -AssemblyName System.Web
