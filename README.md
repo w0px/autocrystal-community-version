@@ -1,10 +1,44 @@
-![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/5c0f7928-15db-4d34-b5f5-3c53a770c37d"
+    alt="star_transparent"
+    width="151"
+    height="151">
 
-# autocrystal Shiny Hunting Bot
+</p>
+
+<h1 align="center">autocrystal Shiny Hunting Bot</h1>
  
- API Project: https://github.com/w0px/w0p-autocrystal
+<p align="center">
+  <b>API Project:</b> <a href="https://github.com/w0px/w0p-autocrystal">w0p-autocrystal</a><br>
+  <b>Discord:</b> w0p
+</p>
+
  
- Discord: w0p
+
+ ## Table of Contents
+
+- [Functions](#functions)
+  - [Wild Encounter Hunting](#wild-encounter-hunting-)
+  - [Starter Hunting](#starter-hunting-)
+  - [Fishing Encounter Hunting](#fishing-encounter-hunting-)
+  - [Static Encounter Hunting](#static-encounter-hunting-)
+  - [Headbutt Encounter Hunting](#headbutt-encounter-hunting-)
+  - [Egg Hunting](#egg-hunting-)
+- [How to Run](#how-to-run)
+- [Discord Notifications](#discord-notifications)
+- [Modules](#modules)
+  - [Wild Encounters Module](#wild-encountes-module)
+  - [Starters Module](#starters-module)
+  - [Headbutt Module](#headbutt-module)
+    - [How Headbutt Trees Work in Gen 2](#how-headbutt-trees-work-in-gen-2)
+    - [Encounter Mechanics](#encounter-mechanics)
+    - [Encounter Rate by Index and Trainer ID](#encounter-rate-by-index-and-trainer-id)
+    - [Analysis](#analysis)
+- [FAQ](#faq)
+  - [Supported Versions](#supported-versions)
+  - [Transferring Save Files from One Emulator to Another](#transferring-save-files-from-one-emulator-to-another)
+  - [Emulator Speed](#emulator-speed)
 
 ## Functions
 
