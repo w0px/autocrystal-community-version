@@ -77,6 +77,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 - In the console select the launcher.lua
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
+
 <img width="617" height="147" alt="image" src="https://github.com/user-attachments/assets/e3a24d3c-8313-4932-a01d-2f9476cca13d" />
 
 
