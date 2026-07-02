@@ -168,6 +168,26 @@ RAM-verified menu navigation, self-corrects on dropped inputs
 Displays every action performed by the bot in the console. Primarily intended for debugging and troubleshooting.
 
 
+## Starters Module
+
+Place the bot directly in front of the starter Pokémon without interacting with the Poké Ball.
+
+<img width="955" height="519" alt="image" src="https://github.com/user-attachments/assets/15215323-254a-4efb-82a9-2776d4979c91" />
+
+Save the game to BizHawk Save State 1
+
+<img width="1031" height="583" alt="image" src="https://github.com/user-attachments/assets/64bda520-fdb3-4adb-b8bb-5a815c1aaf85" />
+
+Start the Starters module from the launcher
+
+<img width="1495" height="614" alt="image" src="https://github.com/user-attachments/assets/fc6c480e-af67-41f3-82f1-3a309e9dcdda" />
+
+Once the bot is running, verify that the starter Pokémon have different stats after each soft reset
+
+If the stats remain the same, the save state was not created correctly, and the bot will keep encountering the same starter repeatedly
+
+<img width="206" height="171" alt="image" src="https://github.com/user-attachments/assets/cd4da4b3-f1b7-49f3-909f-a79f0ec11812" />
+
 
 
 
