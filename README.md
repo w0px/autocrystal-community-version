@@ -131,44 +131,42 @@ in any module, check "Send Discord notification (shiny/stop)" in the GUI.
 
 # Modules
 
-## Wild Encounter Module (wild.lua)
+## Wild Encountes Module
 
 Self-correcting movement (auto-detects safe directions)
 RAM-verified menu navigation, self-corrects on dropped inputs
-Full DV + shiny detection
-Species & held-item names (Dex + full Gen II item table)
 
-<img width="987" height="642" alt="image" src="https://github.com/user-attachments/assets/dff36482-9ce3-4b5b-be0d-a3cfe5cf1310" />
+
+<img width="454" height="828" alt="image" src="https://github.com/user-attachments/assets/8fe1a5a9-6e31-4098-a79a-59e4bdbb1f42" />
+
 
 
 ### Stop Conditions
 
-Perfect DVs (15/15/15/15)
-Perfect Negative DVs (0/0/0/0)
-Specific species (ID or name)
-Held item (any or specific)
-Shiny (always)
-
+- **Perfect DVs (15/15/15/15)** – Stops when a Pokémon with perfect DVs is encountered
+- **Perfect Negative DVs (0/0/0/0)** – Stops when a Pokémon with perfect negative DVs is encountered
+- **Specific Species (Name or ID)** – Stops when a specified Pokémon is encountered, whether shiny or non-shiny
+- **Held Item (Any or Specific)** – Stops when a Pokémon holding any or a specified item is encountered, if a specific item is in the Allowlist the bot will only stop if that item is encountered
+- **Shiny Pokémon** – Always stops upon encountering a shiny Pokémon
 
 ### Kill Mode
 
-Auto-fights non-shinies with first move
-Species allowlist (avoid bad matchups)
-Flees if PP hits 0
+- Automatically battles non-shiny Pokémon using the first move
+- Species Allowlist to avoid unfavorable matchups, the bot will only battle the Pokemon in the Allowlist (ID or Name)
+- Automatically flees when all PP for the selected move is depleted
+- Automatically cancels Pokémon evolutions
+- Pauses auto-leveling when a Pokémon attempts to learn a new move (unless an empty move slot is available)
 
+<img width="800" height="486" alt="2cd5b3901b2209c85db0407c3c6df5ae-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/138b7d12-612b-4572-a941-e44c0ccc7467" />
 
-https://github.com/user-attachments/assets/633d66f2-3de2-486c-b88d-c53aa299ed70
+- Allowlist is set to Hoothoot only, so the bot will escape from any other encounter
 
+<img width="800" height="506" alt="fd2bc9aa5d130eeae9db2edcb0025bf5-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/7eb87d91-bb47-4782-bc4b-83257861b5a7" />
 
+### Verbose Logging
 
-https://github.com/user-attachments/assets/bc844c39-1e5c-4dc0-9c40-d2bc32267d49
+Displays every action performed by the bot in the console. Primarily intended for debugging and troubleshooting.
 
-
-
-
-Live encounter/shiny/runtime/status
-Last encounter + 8-entry history
-All settings adjustable live
 
 
 
