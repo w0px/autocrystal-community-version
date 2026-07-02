@@ -1,6 +1,6 @@
 ![MuIXxKj](https://github.com/w0px/autocrystal-community-version/assets/152983879/0ac9ab7d-fbea-4395-974f-002211fae965)
 
-# Pokemon Crystal Shiny Hunting Bot
+# autocrystal Shiny Hunting Bot
  
  API Project: https://github.com/w0px/w0p-autocrystal
 
