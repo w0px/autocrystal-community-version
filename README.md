@@ -3,6 +3,7 @@
 # autocrystal Shiny Hunting Bot
  
  API Project: https://github.com/w0px/w0p-autocrystal
+ 
  Discord: w0p
 
 ## Functions
