@@ -39,6 +39,7 @@
   - [Transferring Save Files from One Emulator to Another](#transferring-save-files-from-one-emulator-to-another)
   - [Emulator Speed](#emulator-speed)
   - [Discord Notifications](#discord-notifications)
+  - [Savestate Slot Usage](#Savestate-Slot-Usage)
 
 ## Functions
 
@@ -160,9 +161,7 @@ Place the bot directly in front of the starter Pokémon without interacting with
 
 <img width="955" height="519" alt="image" src="https://github.com/user-attachments/assets/15215323-254a-4efb-82a9-2776d4979c91" />
 
-Save the game to BizHawk Save State 1
-
-<img width="1031" height="583" alt="image" src="https://github.com/user-attachments/assets/64bda520-fdb3-4adb-b8bb-5a815c1aaf85" />
+The bot will use Save Slot 3 to soft reset the game, from now on don't touch it.
 
 Start the Starters module from the launcher
 
@@ -320,6 +319,22 @@ move the DCNotifications_start.bat file into your downloaded Bizhawk directory a
 ### 4. Configure the bot
 
 in any module, check "Send Discord notification (shiny/stop)" in the GUI.
+
+## Savestate Slot Usage
+
+Modules that soft-reset use BizHawk savestate slots to mark their reset point. You never need to manually save these yourself - each module's on_resume() calls savestate.saveslot(N) automatically, every time you click Start, capturing whatever position you're currently standing in at that exact moment.
+
+Your only manual step is positioning your character correctly (facing the starter table, facing the egg-giving NPC, etc.) before clicking Start - the bot takes it from there.
+
+Each module uses its own dedicated slot to avoid collisions if you switch between them in the same session.
+
+| Slot | Module | Reset point (auto-saved on Start) |
+|------|--------|------------------------------------|
+| 3 | Starters | Right before picking a starter |
+| 4 | Egg Hatching | Right before talking to the egg-giving NPC |
+| 5 | Static Encounters | Right before talking to the NPC |
+
+Slots 1-2 and 6-9 are free for your own manual use without conflicting with any module.
 
 
 
