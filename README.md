@@ -41,9 +41,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 potentially even more ✅
 
 ## Discord Notifications
-
-<img width="548" height="83" alt="image" src="https://github.com/user-attachments/assets/ae4d411e-9b5d-4bf8-99cc-5cba1ac658c3" />
-<img width="586" height="71" alt="image" src="https://github.com/user-attachments/assets/24c69584-aea3-4825-9d86-08ce0ba76a1e" />
+<img width="571" height="173" alt="image" src="https://github.com/user-attachments/assets/4c882ee4-8eab-4c6c-a6d0-7c9113ad187b" />
 
 
 
