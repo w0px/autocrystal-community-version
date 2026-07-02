@@ -26,7 +26,6 @@
   - [Headbutt Encounter Hunting](#headbutt-encounter-hunting-)
   - [Egg Hunting](#egg-hunting-)
 - [How to Run](#how-to-run)
-- [Discord Notifications](#discord-notifications)
 - [Modules](#modules)
   - [Wild Encounters Module](#wild-encountes-module)
   - [Starters Module](#starters-module)
@@ -39,6 +38,7 @@
   - [Supported Versions](#supported-versions)
   - [Transferring Save Files from One Emulator to Another](#transferring-save-files-from-one-emulator-to-another)
   - [Emulator Speed](#emulator-speed)
+  - [Discord Notifications](#discord-notifications)
 
 ## Functions
 
@@ -113,37 +113,6 @@ https://github.com/TASEmulators/BizHawk/releases/
 <img width="463" height="405" alt="image" src="https://github.com/user-attachments/assets/8359c386-c4a6-47a1-bcca-45ea3dcd2b3c" />
 
 
-
-## Discord Notifications
-<img width="571" height="173" alt="image" src="https://github.com/user-attachments/assets/4c882ee4-8eab-4c6c-a6d0-7c9113ad187b" />
-
-
-
-
-BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
-
-### 1. Create a webhook
-
-
-Discord → Server Settings → Integrations → Webhooks → New Webhook
-Copy the Webhook URL
-
-
-### 2. Set up the relay
-
-
-Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
-Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
-
-
-### 3. Point BizHawk at the relay
-
-move the DCNotifications_start.bat file into your downloaded Bizhawk directory and double click to start the emulator
-
-
-### 4. Configure the bot
-
-in any module, check "Send Discord notification (shiny/stop)" in the GUI.
 
 
 # Modules
@@ -317,6 +286,38 @@ Instead, use the game's **battery save (SRAM)**—the same save data created whe
 400% ✅
 
 potentially even more ✅
+
+## Discord Notifications
+<img width="571" height="173" alt="image" src="https://github.com/user-attachments/assets/4c882ee4-8eab-4c6c-a6d0-7c9113ad187b" />
+
+
+
+
+BizHawk's comm.httpPost can't send Discord's required JSON format directly (it wraps everything as a form field, which Discord rejects). A tiny local relay handles the translation instead.
+
+### 1. Create a webhook
+
+
+Discord → Server Settings → Integrations → Webhooks → New Webhook
+Copy the Webhook URL
+
+
+### 2. Set up the relay
+
+
+Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
+Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
+
+
+### 3. Point BizHawk at the relay
+
+move the DCNotifications_start.bat file into your downloaded Bizhawk directory and double click to start the emulator
+
+
+### 4. Configure the bot
+
+in any module, check "Send Discord notification (shiny/stop)" in the GUI.
+
 
 
 
