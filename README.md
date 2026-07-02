@@ -72,7 +72,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 - In the BizHawk menu select LUA Console
 
-![image](https://github.com/w0px/autocrystalprivate/assets/152983879/3f4e8e0c-d3a1-49fe-9853-f0aac4a04d2e)
+<img width="698" height="452" alt="image" src="https://github.com/user-attachments/assets/1e42e0d1-a74f-464d-910b-987cd6fced1e" />
 
 - In the console select the launcher.lua
 
