@@ -4,6 +4,54 @@
  
  API Project: https://github.com/w0px/w0p-autocrystal
 
+## Functions
+
+### Wild Encounter Hunting ✅
+- Shiny Detection
+- Held Item Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+- Automatic Level Grinding
+- Targeted Encounter Hunting
+
+### Starter Hunting ✅
+- Shiny Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+
+### Fishing Encounter Hunting 🟡
+- Shiny Detection
+- Held Item Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+- Automatic Level Grinding
+- Targeted Encounter Hunting
+
+### Static Encounter Hunting 🟡
+- Shiny Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+
+### Headbutt Encounter Hunting 🟡
+- Shiny Detection
+- Held Item Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+- Automatic Level Grinding
+- Targeted Encounter Hunting
+
+### Egg Hunting 🟡
+- Shiny Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+
+
 ## Supported Versions:
 
 Crystal US✅ EU✅ JP✅
