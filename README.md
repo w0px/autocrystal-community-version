@@ -74,9 +74,12 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/3f4e8e0c-d3a1-49fe-9853-f0aac4a04d2e)
 
-- In the console select the module you want to run by importing the lua script to the console
+- In the console select the launcher.lua
 
 ![image](https://github.com/w0px/autocrystalprivate/assets/152983879/ae20fbce-1346-4566-8643-486ca3d4d655)
+<img width="617" height="147" alt="image" src="https://github.com/user-attachments/assets/e3a24d3c-8313-4932-a01d-2f9476cca13d" />
+
+
 
 ## Emulator Speed
 
@@ -87,6 +90,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 400% ✅
 
 potentially even more ✅
+
 
 ## Discord Notifications
 <img width="571" height="173" alt="image" src="https://github.com/user-attachments/assets/4c882ee4-8eab-4c6c-a6d0-7c9113ad187b" />
