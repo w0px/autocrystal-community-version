@@ -184,9 +184,9 @@ Start the Starters module from the launcher
 
 Once the bot is running, verify that the starter Pokémon have different stats after each soft reset
 
-If the stats remain the same, the save state was not created correctly, and the bot will keep encountering the same starter repeatedly
-
 <img width="206" height="171" alt="image" src="https://github.com/user-attachments/assets/cd4da4b3-f1b7-49f3-909f-a79f0ec11812" />
+
+If the stats remain the same, the save state was not created correctly, and the bot will keep encountering the same starter repeatedly
 
 
 
