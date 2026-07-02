@@ -198,9 +198,11 @@ If the stats remain the same, the save state was not created correctly, and the 
 ### How Headbutt Trees work in Gen 2
 
 A tree's identity is permanently fixed, not random per attempt. Which encounter table a tree draws from (and its encounter rate — some trees are 80%, some 50%, some as low as 10% "rare") is determined by a formula using your Trainer ID plus that tree's exact map coordinates. It's baked into your save file the moment that tree exists on the map — it never rotates, never moves to a different tree, and doesn't change between attempts.
-Trees don't deplete. Unlike the HGSS remakes (where a tree that gives nothing on the first try stays empty forever), Gen 2's mechanic has no exhaustion at all — every headbuttable tree has some nonzero encounter chance, permanently, no matter how many times you've already hit it. There are 2 Types of Trees Forest Group and Mountain Group, both with shared and unique encounters.
+Trees don't deplete. Unlike the HGSS remakes (where a tree that gives nothing on the first try stays empty forever), Gen 2's mechanic has no exhaustion at all — every headbuttable tree has some nonzero encounter chance, permanently, no matter how many times you've already hit it. There are 3 Types of Trees Forest Group, City Group and Mountain Group, all with unique [encounters](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree).
 
 ## Encounter Mechanics
+
+[Source](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree)
 
 The encounter rate and encounter table of each tree depends on the tree's index and the player's **Trainer ID number**.
 
