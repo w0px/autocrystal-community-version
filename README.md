@@ -305,13 +305,16 @@ Copy the Webhook URL
 ### 2. Set up the relay
 
 
-Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl
+Open discord_relay.ps1, paste your webhook URL into $DiscordWebhookUrl - this will create a local http listener on your computer which is needed for discord notifications
 Double-click start_relay.bat — a console window opens and must stay running the whole time you're botting
 
 
 ### 3. Point BizHawk at the relay
 
 move the DCNotifications_start.bat file into your downloaded Bizhawk directory and double click to start the emulator
+
+<img width="697" height="390" alt="image" src="https://github.com/user-attachments/assets/d63698f5-4544-4824-bc9d-33cfd69406cc" />
+
 
 
 ### 4. Configure the bot
