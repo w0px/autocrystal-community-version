@@ -21,7 +21,7 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 
-### Fishing Encounter Hunting 🟡
+### Fishing Encounter Hunting ✅
 - Shiny Detection
 - Held Item Detection
 - Perfect DV Detection
@@ -36,7 +36,7 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 
-### Headbutt Encounter Hunting 🟡
+### Headbutt Encounter Hunting ✅
 - Shiny Detection
 - Held Item Detection
 - Perfect DV Detection
