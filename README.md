@@ -54,13 +54,6 @@
 - Discord Notifications
 
 
-## Supported Versions:
-
-Crystal US✅ EU✅ JP✅
-
-Silver US✅ EU🟡 JP🟡
-
-Gold US✅ EU🟡 JP🟡
 
 
 ## How to run
@@ -85,18 +78,6 @@ https://github.com/TASEmulators/BizHawk/releases/
 - in the launcher select a module you want to run
 <img width="463" height="405" alt="image" src="https://github.com/user-attachments/assets/8359c386-c4a6-47a1-bcca-45ea3dcd2b3c" />
 
-
-
-
-## Emulator Speed
-
-100% ✅
-
-200% ✅
-
-400% ✅
-
-potentially even more ✅
 
 
 ## Discord Notifications
@@ -250,6 +231,58 @@ TreeIndex = ⌊(Z·n + Z + n) / 5⌋ mod 10
 ```
 
 This result shows that, if a single row or column of trees is traversed, moving to an adjacent tree increases the tree's index by **(Z + 1) / 5** (modulo 10), where **Z** is the distance of that row or column from its origin edge (north or west). This means that the closer a row or column is to the edge, the slower the indices of those trees change as the row or column is traversed.
+
+# FAQ
+
+## Supported Versions:
+
+Crystal US✅ EU✅ JP✅
+
+Silver US✅ EU🟡 JP🟡
+
+Gold US✅ EU🟡 JP🟡
+
+## Transferring Save Files from one Emulator to another
+
+lets use Bizhawk and mGBA as an example.
+
+BizHawk save states (`.State`) and mGBA save states are **not compatible**.
+
+A save state contains the complete internal state of a specific emulator core. Since BizHawk's **Gambatte** core and mGBA's **Game Boy** core are completely different implementations, save states cannot be transferred between them, regardless of the file extension.
+
+Instead, use the game's **battery save (SRAM)**—the same save data created when you save through the in-game **SAVE** menu.
+
+### Steps
+
+1. In **BizHawk**, save the game using the in-game **SAVE** option (just like on a real Game Boy cartridge).
+2. Ignore the Save State dialog—you do **not** need to export or convert a save state.
+3. Navigate to your BizHawk directory and open:
+   ```
+   Gameboy/SaveRAM/
+   ```
+4. Locate the generated `.SaveRAM` file, for example:
+   ```
+   Pokemon - Crystal Version (USA, Europe) (Rev A).SaveRAM
+   ```
+5. Copy the file to the same folder as your mGBA ROM.
+6. Rename the file so it matches the ROM filename exactly, using the `.sav` extension.
+
+   **Example:**
+   ```
+   ROM:  Pokemon Crystal.gbc
+   Save: Pokemon Crystal.sav
+   ```
+7. Launch the ROM in **mGBA** normally using **File → Load ROM**. If the `.sav` file is in the same directory and has the correct filename, mGBA will automatically load your save.
+
+## Emulator Speed
+
+100% ✅
+
+200% ✅
+
+400% ✅
+
+potentially even more ✅
 
 
 
