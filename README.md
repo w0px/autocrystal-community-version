@@ -40,6 +40,8 @@
   - [Emulator Speed](#emulator-speed)
   - [Discord Notifications](#discord-notifications)
   - [Savestate Slot Usage](#Savestate-Slot-Usage)
+- [Roadmap](#roadmap) 
+
 
 ## Functions
 
@@ -334,6 +336,13 @@ Each module uses its own dedicated slot to avoid collisions if you switch betwee
 | 5 | Static Encounters | Right before talking to the NPC |
 
 Slots 1-2 and 6-9 are free for your own manual use without conflicting with any module.
+
+## Roadmap
+
+- [ ] Static Encounter Module Testing
+- [ ] Full Support for Gold and Silver EU/NA/JP
+- [ ] Roaming Legendaries Module
+- [ ] Support for ROM Hacks Crystal Clear, Ultimate Crystal
 
 
 
