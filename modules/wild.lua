@@ -16,11 +16,11 @@ ItemNames = require("data.item_names")
 
 local hud -- assigned in M.init()
 
-function get_pokemon_name(id)
+local function get_pokemon_name(id)
     return PokemonNames[id] or ("Unknown #" .. tostring(id))
 end
 
-function get_item_name(id)
+local function get_item_name(id)
     return ItemNames[id] or ("Unknown Item #" .. tostring(id))
 end
 
@@ -28,7 +28,7 @@ end
 -- directly, so they can be silenced by default (they add real overhead
 -- at high fast-forward speeds) and re-enabled via the GUI's "Verbose
 -- Logging" checkbox when actually debugging something.
-function vprint(msg)
+local function vprint(msg)
     if Gui.verbose_logging(hud) then
         print(msg)
     end
@@ -38,7 +38,7 @@ end
 -- a name like "Bellsprout") against the current species, matching on
 -- either its numeric ID or its name (case-insensitive). nil tokens list
 -- means no filter was set, so everything is allowed.
-function species_matches_filter(tokens, id, name)
+local function species_matches_filter(tokens, id, name)
     if tokens == nil then return true end
     local nameLower = name:lower()
     for _, token in ipairs(tokens) do
@@ -62,7 +62,7 @@ end
 -- fixed local address, so it's a constant rather than a GUI field.
 local DISCORD_RELAY_URL = "http://127.0.0.1:5000/"
 
-function send_discord_notification(message)
+local function send_discord_notification(message)
     if not Gui.discord_enabled(hud) then return end
     local safeMessage = message:gsub('"', '\\"')
     local payload = string.format('{"content": "%s"}', safeMessage)
@@ -123,7 +123,7 @@ local FIRST_MOVE_PP_ADDR = 0xC634
 
 local dv_flag_addr, species_addr, item_addr
 
-function shiny(atkdef, spespc)
+local function shiny(atkdef, spespc)
     if spespc == 0xAA then
         if atkdef == 0x2A or atkdef == 0x3A or atkdef == 0x6A or atkdef == 0x7A or atkdef == 0xAA or atkdef == 0xBA or atkdef == 0xEA or atkdef == 0xFA then
             shinyvalue = 1
@@ -133,8 +133,8 @@ function shiny(atkdef, spespc)
     return false
 end
 
-function press_button(btn)
-    input = {[btn] = true}
+local function press_button(btn)
+    local input = {[btn] = true}
     for i = 1, 4 do -- Hold button for 4 frames (make sure the game registers it)
         joypad.set(input)
         emu.frameadvance()
@@ -156,7 +156,7 @@ local MOVEMENT_IDLE_VALUE = 0xFF
 -- Returns true only if the tile position actually changed - the flag
 -- tells us WHEN to check, the position change tells us WHETHER it
 -- counted as a real step (vs. a blocked bump against a wall/tree).
-function attempt_step(direction)
+local function attempt_step(direction)
     local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
 
     for i = 1, 4 do
@@ -198,7 +198,7 @@ local safe_pair = nil
 local homeX, homeY = nil, nil
 
 -- Attempts one step closer to home. Returns true once actually there.
-function walk_toward_home()
+local function walk_toward_home()
     local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
     if curX == homeX and curY == homeY then return true end
 
@@ -217,7 +217,7 @@ function walk_toward_home()
     return (curX == homeX and curY == homeY)
 end
 
-function find_safe_pair(verbose)
+local function find_safe_pair(verbose)
     local anchorX, anchorY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
     local candidates = {
         {out = "Right", back = "Left"},
@@ -267,7 +267,7 @@ local UNSTUCK_THRESHOLD = 100
 -- interruption individually, we just notice "no real movement for a
 -- long time despite believing we're free to move" and try to clear
 -- whatever's blocking us generically.
-function try_unstuck()
+local function try_unstuck()
     print(string.format("No real movement for %d cycles - possibly a phone call/sign/text box blocking input. Trying to clear it.", consecutive_movement_failures))
     -- B, never A: some phone calls (rematch challenges) end in a
     -- "battle now? Yes/No" prompt, and mashing A could accidentally
@@ -283,7 +283,7 @@ function try_unstuck()
     consecutive_movement_failures = 0
 end
 
-function do_nudge_cycle()
+local function do_nudge_cycle()
     local madeRealProgress = false
 
     if homeX == nil then
@@ -355,7 +355,7 @@ end
 -- Compute the single correct next input to move the battle-menu cursor
 -- toward `target` ({y=.., x=..}), based on the ACTUAL current cursor
 -- position, never on an assumed sequence.
-function navigate_to_menu_option(target)
+local function navigate_to_menu_option(target)
     local cy = memory.readbyte(MENU_CURSOR_Y)
     local cx = memory.readbyte(MENU_CURSOR_X)
 
@@ -375,7 +375,7 @@ end
 -- Press a button, then wait until the cursor actually moves (or we time out).
 -- Self-correcting: if a press is dropped or lag delays it, we just
 -- re-evaluate from wherever we actually ended up.
-function press_and_wait_for_cursor_change(btn, timeout)
+local function press_and_wait_for_cursor_change(btn, timeout)
     local prevY = memory.readbyte(MENU_CURSOR_Y)
     local prevX = memory.readbyte(MENU_CURSOR_X)
     press_button(btn)
@@ -396,7 +396,7 @@ local have_battle_controls = false
 -- needed, since "kill non-shiny" always wants the first attack.
 local FIGHT_CURSOR = {y = 1, x = 1}
 
-function do_kill_turn()
+local function do_kill_turn()
     local nav_attempts = 0
     while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
         local cy = memory.readbyte(MENU_CURSOR_Y)
@@ -450,7 +450,7 @@ local WATCHDOG_FRAMES = 1800
 local watchdogLastX, watchdogLastY
 local watchdogLastMoveFrame
 
-function watchdog_force_unstuck()
+local function watchdog_force_unstuck()
     print(string.format("WATCHDOG: no position change for %d+ frames (~30s) regardless of internal state - forcing recovery", WATCHDOG_FRAMES))
     for i = 1, 30 do
         press_button("B")
@@ -460,6 +460,49 @@ function watchdog_force_unstuck()
     overworld_loaded = false
     realEncounterConfirmed = false
     watchdogLastMoveFrame = emu.framecount()
+end
+
+-- Hooks get REPLACED by name every time RegisterROMHook runs (confirmed
+-- from data/memory.lua's own event.unregisterbyname call) - so whichever
+-- module registered LAST keeps its hooks active, even after switching to
+-- a "different" module, unless that module re-registers its own. This
+-- must be called every time this module becomes active, not just once.
+local function register_hooks()
+    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
+        if ActiveModuleName ~= "wild" then return end
+        have_battle_controls = true
+        vprint(string.format("Battle menu loaded | Cursor Y=%d X=%d",
+            memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)))
+    end, "Detect Battle Menu")
+
+    Mem.RegisterROMHook(EnemyWildmonInitialized, function()
+        if ActiveModuleName ~= "wild" then return end
+        realEncounterConfirmed = true
+        vprint("combat started")
+        item = memory.readbyte(item_addr)
+        atkdef = memory.readbyte(enemy_addr)
+        spespc = memory.readbyte(enemy_addr + 1)
+        highestAtkDef = math.max(highestAtkDef, atkdef)
+        highestSpeSpc = math.max(highestSpeSpc, spespc)
+        species = memory.readbyte(species_addr)
+        shiny(atkdef, spespc) -- sets shinyvalue as a side effect if applicable
+
+        local speciesName = get_pokemon_name(species)
+        local itemName = get_item_name(item)
+        print(string.format("%s (#%d) | Atk: %d Def: %d Spe: %d Spc: %d | Item: %s",
+            speciesName, species, math.floor(atkdef/16), atkdef%16, math.floor(spespc/16), spespc%16, itemName))
+
+        sessionEncounterCount = sessionEncounterCount + 1
+
+        -- IMPORTANT: this hook fires as a ROM-hook callback, and we've
+        -- confirmed BizHawk restricts what's allowed inside callbacks
+        -- (emu.frameadvance throws outright; forms.drawText/drawRectangle
+        -- calls made from here appear to silently not flush to screen).
+        -- So we only record raw data here and let M.step() - running in
+        -- the main loop, a confirmed-safe context - do all the actual
+        -- GUI updates, stop-condition checks, and Discord notification.
+        pendingEncounterUpdate = true
+    end, "Tell Display Battle Started / sending data")
 end
 
 -- ===== M.init: runs ONCE, sets everything up =====
@@ -532,41 +575,7 @@ function M.init(sharedForm, yOffset, existingHud)
     watchdogLastX, watchdogLastY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
     watchdogLastMoveFrame = emu.framecount()
 
-    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
-        if ActiveModuleName ~= "wild" then return end
-        have_battle_controls = true
-        vprint(string.format("Battle menu loaded | Cursor Y=%d X=%d",
-            memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)))
-    end, "Detect Battle Menu")
-
-    Mem.RegisterROMHook(EnemyWildmonInitialized, function()
-        if ActiveModuleName ~= "wild" then return end
-        realEncounterConfirmed = true
-        vprint("combat started")
-        item = memory.readbyte(item_addr)
-        atkdef = memory.readbyte(enemy_addr)
-        spespc = memory.readbyte(enemy_addr + 1)
-        highestAtkDef = math.max(highestAtkDef, atkdef)
-        highestSpeSpc = math.max(highestSpeSpc, spespc)
-        species = memory.readbyte(species_addr)
-        shiny(atkdef, spespc) -- sets shinyvalue as a side effect if applicable
-
-        local speciesName = get_pokemon_name(species)
-        local itemName = get_item_name(item)
-        print(string.format("%s (#%d) | Atk: %d Def: %d Spe: %d Spc: %d | Item: %s",
-            speciesName, species, math.floor(atkdef/16), atkdef%16, math.floor(spespc/16), spespc%16, itemName))
-
-        sessionEncounterCount = sessionEncounterCount + 1
-
-        -- IMPORTANT: this hook fires as a ROM-hook callback, and we've
-        -- confirmed BizHawk restricts what's allowed inside callbacks
-        -- (emu.frameadvance throws outright; forms.drawText/drawRectangle
-        -- calls made from here appear to silently not flush to screen).
-        -- So we only record raw data here and let M.step() - running in
-        -- the main loop, a confirmed-safe context - do all the actual
-        -- GUI updates, stop-condition checks, and Discord notification.
-        pendingEncounterUpdate = true
-    end, "Tell Display Battle Started / sending data")
+    register_hooks()
 
     Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Settling into overworld...")
     return true
@@ -586,6 +595,7 @@ end
 -- first time or returning to it after a different module ran. Distinct
 -- from on_resume, which is specifically about the Start button.
 function M.on_switch_to()
+    register_hooks()
     Gui.reconfigure(hud, {})
     Gui.clear_last_encounter(hud)
 end

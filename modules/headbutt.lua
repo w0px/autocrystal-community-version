@@ -32,21 +32,21 @@ Stats = require("data.stats")
 
 local hud
 
-function get_pokemon_name(id)
+local function get_pokemon_name(id)
     return PokemonNames[id] or ("Unknown #" .. tostring(id))
 end
 
-function get_item_name(id)
+local function get_item_name(id)
     return ItemNames[id] or ("Unknown Item #" .. tostring(id))
 end
 
-function vprint(msg)
+local function vprint(msg)
     if Gui.verbose_logging(hud) then
         print(msg)
     end
 end
 
-function species_matches_filter(tokens, id, name)
+local function species_matches_filter(tokens, id, name)
     if tokens == nil then return true end
     local nameLower = name:lower()
     for _, token in ipairs(tokens) do
@@ -63,7 +63,7 @@ end
 
 local DISCORD_RELAY_URL = "http://127.0.0.1:5000/"
 
-function send_discord_notification(message)
+local function send_discord_notification(message)
     if not Gui.discord_enabled(hud) then return end
     local safeMessage = message:gsub('"', '\\"')
     local payload = string.format('{"content": "%s"}', safeMessage)
@@ -98,7 +98,7 @@ local FIRST_MOVE_PP_ADDR = 0xC634
 
 local dv_flag_addr, species_addr, item_addr
 
-function shiny(atkdef, spespc)
+local function shiny(atkdef, spespc)
     if spespc == 0xAA then
         if atkdef == 0x2A or atkdef == 0x3A or atkdef == 0x6A or atkdef == 0x7A or atkdef == 0xAA or atkdef == 0xBA or atkdef == 0xEA or atkdef == 0xFA then
             shinyvalue = 1
@@ -108,8 +108,8 @@ function shiny(atkdef, spespc)
     return false
 end
 
-function press_button(btn)
-    input = {[btn] = true}
+local function press_button(btn)
+    local input = {[btn] = true}
     for i = 1, 4 do
         joypad.set(input)
         emu.frameadvance()
@@ -117,7 +117,7 @@ function press_button(btn)
     emu.frameadvance()
 end
 
-function navigate_to_menu_option(target)
+local function navigate_to_menu_option(target)
     local cy = memory.readbyte(MENU_CURSOR_Y)
     local cx = memory.readbyte(MENU_CURSOR_X)
 
@@ -134,7 +134,7 @@ function navigate_to_menu_option(target)
     end
 end
 
-function press_and_wait_for_cursor_change(btn, timeout)
+local function press_and_wait_for_cursor_change(btn, timeout)
     local prevY = memory.readbyte(MENU_CURSOR_Y)
     local prevX = memory.readbyte(MENU_CURSOR_X)
     press_button(btn)
@@ -151,7 +151,7 @@ end
 local have_battle_controls = false
 local FIGHT_CURSOR = {y = 1, x = 1}
 
-function do_kill_turn()
+local function do_kill_turn()
     local nav_attempts = 0
     while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
         local cy = memory.readbyte(MENU_CURSOR_Y)
@@ -193,7 +193,7 @@ end
 -- Confirmed directly: unlike fishing's cast-and-wait, headbutt is
 -- immediate - 4 presses performs the headbutt, and you either get an
 -- encounter or you don't, no waiting period needed.
-function do_headbutt_cycle()
+local function do_headbutt_cycle()
     vprint("Headbutting tree...")
     for i = 1, 4 do
         if memory.readbyte(species_addr) ~= 0 then
@@ -215,6 +215,41 @@ local overworld_settle_frames = 0
 local REQUIRED_SETTLE_FRAMES = 10
 
 -- ===== M.init =====
+-- Hooks get REPLACED by name every time RegisterROMHook runs (confirmed
+-- from data/memory.lua's own event.unregisterbyname call) - so whichever
+-- module registered LAST keeps its hooks active, even after switching to
+-- a "different" module, unless that module re-registers its own. This
+-- must be called every time this module becomes active, not just once.
+local function register_hooks()
+    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
+        if ActiveModuleName ~= "headbutt" then return end
+        have_battle_controls = true
+        vprint(string.format("Battle menu loaded | Cursor Y=%d X=%d",
+            memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)))
+    end, "Detect Battle Menu")
+
+    Mem.RegisterROMHook(EnemyWildmonInitialized, function()
+        if ActiveModuleName ~= "headbutt" then return end
+        realEncounterConfirmed = true
+        vprint("combat started")
+        item = memory.readbyte(item_addr)
+        atkdef = memory.readbyte(enemy_addr)
+        spespc = memory.readbyte(enemy_addr + 1)
+        highestAtkDef = math.max(highestAtkDef, atkdef)
+        highestSpeSpc = math.max(highestSpeSpc, spespc)
+        species = memory.readbyte(species_addr)
+        shiny(atkdef, spespc)
+
+        local speciesName = get_pokemon_name(species)
+        local itemName = get_item_name(item)
+        print(string.format("%s (#%d) | Atk: %d Def: %d Spe: %d Spc: %d | Item: %s",
+            speciesName, species, math.floor(atkdef/16), atkdef%16, math.floor(spespc/16), spespc%16, itemName))
+
+        sessionEncounterCount = sessionEncounterCount + 1
+        pendingEncounterUpdate = true
+    end, "Tell Display Battle Started / sending data")
+end
+
 function M.init(sharedForm, yOffset, existingHud)
     Stats.load()
 
@@ -272,33 +307,7 @@ function M.init(sharedForm, yOffset, existingHud)
     species_addr = enemy_addr + 0x22
     item_addr = enemy_addr - 0x05
 
-    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
-        if ActiveModuleName ~= "headbutt" then return end
-        have_battle_controls = true
-        vprint(string.format("Battle menu loaded | Cursor Y=%d X=%d",
-            memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)))
-    end, "Detect Battle Menu")
-
-    Mem.RegisterROMHook(EnemyWildmonInitialized, function()
-        if ActiveModuleName ~= "headbutt" then return end
-        realEncounterConfirmed = true
-        vprint("combat started")
-        item = memory.readbyte(item_addr)
-        atkdef = memory.readbyte(enemy_addr)
-        spespc = memory.readbyte(enemy_addr + 1)
-        highestAtkDef = math.max(highestAtkDef, atkdef)
-        highestSpeSpc = math.max(highestSpeSpc, spespc)
-        species = memory.readbyte(species_addr)
-        shiny(atkdef, spespc)
-
-        local speciesName = get_pokemon_name(species)
-        local itemName = get_item_name(item)
-        print(string.format("%s (#%d) | Atk: %d Def: %d Spe: %d Spc: %d | Item: %s",
-            speciesName, species, math.floor(atkdef/16), atkdef%16, math.floor(spespc/16), spespc%16, itemName))
-
-        sessionEncounterCount = sessionEncounterCount + 1
-        pendingEncounterUpdate = true
-    end, "Tell Display Battle Started / sending data")
+    register_hooks()
 
     Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount,
         "Ready - stand facing a headbuttable tree...")
@@ -306,6 +315,7 @@ function M.init(sharedForm, yOffset, existingHud)
 end
 
 function M.on_switch_to()
+    register_hooks()
     Gui.reconfigure(hud, {})
     Gui.clear_last_encounter(hud)
 end
