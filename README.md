@@ -100,7 +100,7 @@
 download latest BizHawk release
 https://github.com/TASEmulators/BizHawk/releases/
 
-- Download a official Crystal ROM
+- Download an official Crystal ROM
 
 - Start the ROM in the BizHawk Emulator
 
