@@ -236,13 +236,13 @@ This result shows that, if a single row or column of trees is traversed, moving 
 
 # FAQ
 
-## Supported Versions:
+## Supported Versions
 
-Crystal US✅ EU✅ JP✅
-
-Silver US✅ EU🟡 JP🟡
-
-Gold US✅ EU🟡 JP🟡
+| Game | US | EU | JP |
+|------|:--:|:--:|:--:|
+| Crystal | ✅ | ✅ | ✅ |
+| Silver | ✅ | 🟡 | 🟡 |
+| Gold | ✅ | 🟡 | 🟡 |
 
 ## Transferring Save Files from one Emulator to another
 
@@ -278,13 +278,12 @@ Instead, use the game's **battery save (SRAM)**—the same save data created whe
 
 ## Emulator Speed
 
-100% ✅
-
-200% ✅
-
-400% ✅
-
-potentially even more ✅
+| Emulator Speed | Status |
+|----------------|--------|
+| 100% | Fully Supported ✅ |
+| 200% | Fully Supported ✅ |
+| 400% | Fully Supported ✅ |
+| Unthrottled | Fully Supported ✅ |
 
 ## Discord Notifications
 <img width="571" height="173" alt="image" src="https://github.com/user-attachments/assets/4c882ee4-8eab-4c6c-a6d0-7c9113ad187b" />
