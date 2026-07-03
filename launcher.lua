@@ -28,14 +28,14 @@ Gui = require("gui_module")
 -- back to the base launcher_art.png.
 local MODULES = {
     { name = "Wild Encounters", module = "wild", available = true, art = "launcher_art1.png" },
-    { name = "Egg Hatching (coming soon)", module = "egg", available = false, art = "launcher_art2.png" },
+    { name = "Egg Hatching", module = "egg", available = true, art = "launcher_art2.png" },
     { name = "Static Encounters (coming soon)", module = "static", available = false, art = "launcher_art3.png" },
     { name = "Starters", module = "starters", available = true, art = "launcher_art4.png" },
     { name = "Fishing", module = "fishing", available = true, art = "launcher_art5.png" },
     { name = "Headbutt", module = "headbutt", available = true, art = "launcher_art6.png" },
 }
 
-local shell = forms.newform(460, 900, "AutoCrystal Launcher")
+local shell = forms.newform(460, 900, "autocrystal Launcher")
 forms.setlocation(shell, 100, 100)
 
 forms.label(shell, "Select a mode:", 10, 10, 200, 20)
