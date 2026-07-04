@@ -17,34 +17,26 @@
 
  
 
- ## Table of Contents
+## Table of Contents
 
 - [Functions](#functions)
-  - [Wild Encounter Hunting](#wild-encounter-hunting-)
-  - [Starter Hunting](#starter-hunting-)
-  - [Fishing Encounter Hunting](#fishing-encounter-hunting-)
-  - [Static Encounter Hunting](#static-encounter-hunting-)
-  - [Headbutt Encounter Hunting](#headbutt-encounter-hunting-)
-  - [Egg Hunting](#egg-hunting-)
 - [How to Run](#how-to-run)
 - [Modules](#modules)
   - [Wild Encounters Module](#wild-encountes-module)
   - [Starters Module](#starters-module)
   - [Headbutt Module](#headbutt-module)
-    - [How Headbutt Trees Work in Gen 2](#how-headbutt-trees-work-in-gen-2)
-    - [Encounter Mechanics](#encounter-mechanics)
-    - [Encounter Rate by Index and Trainer ID](#encounter-rate-by-index-and-trainer-id)
-    - [Analysis](#analysis)
+  - [Egg Hatching Module](#egg-hatching-module)
 - [FAQ](#faq)
   - [Supported Versions](#supported-versions)
   - [Transferring Save Files from One Emulator to Another](#transferring-save-files-from-one-emulator-to-another)
   - [Emulator Speed](#emulator-speed)
   - [Discord Notifications](#discord-notifications)
-    - [Why is there a local https Listener?](#why-is-there-a-local-http-listener-discord_relayps1)
-  - [Savestate Slot Usage](#Savestate-Slot-Usage)
-- [Roadmap](#roadmap) 
+  - [Savestate Slot Usage](#savestate-slot-usage)
+  - [Simulating Randomness: RNG Manipulation in Deterministic Emulation](#simulating-randomness-rng-manipulation-in-deterministic-emulation)
+  - [Case Study: Pokémon Gen 1 & Gen 2 Soft Reset Automation](#case-study-pokémon-gen-1--gen-2-soft-reset-automation)
+- [Roadmap](#roadmap)
 
-
+  
 ## Functions
 
 ### Wild Encounter Hunting ✅
@@ -126,6 +118,7 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 Self-correcting movement (auto-detects safe directions)
 RAM-verified menu navigation, self-corrects on dropped inputs
+Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 
 
 <img width="454" height="828" alt="image" src="https://github.com/user-attachments/assets/8fe1a5a9-6e31-4098-a79a-59e4bdbb1f42" />
@@ -177,9 +170,18 @@ Once the bot is running, verify that the starter Pokémon have different stats a
 
 If the stats remain the same, the save state was not created correctly, and the bot will keep encountering the same starter repeatedly
 
+### About the "True Randomness" Checkbox
+
+
+Off (default): fast, ~98.8% empirically-measured DV coverage. Plenty for shiny hunting - 8 valid combinations out of 65536, so a small coverage gap is very unlikely to exclude all of them.
+On: much slower (single delay of 65536+ frames instead of the fast split approach), but mathematically guarantees reaching every possible DV combination given enough time. Use this specifically when hunting a single unique target like 15/15/15/15 (Perfect DVs) or 0/0/0/0 (Perfect Negative DVs), where there's only one valid combination and the stakes of a coverage gap are much higher.
+
+Whether the fast "Off" mode happens to already cover a specific rare target like 15/15/15/15 depends on the individual save file - it might, or it might not, with no way to know in advance. "On" removes that uncertainty at the cost of speed.
+
 
 ## Headbutt Module
 
+Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 - position infront of a headbutt tree and start the module
 
 <img width="504" height="475" alt="image" src="https://github.com/user-attachments/assets/4ab1a4a0-e977-4c50-8edd-9a53b675d07a" />
@@ -237,6 +239,10 @@ TreeIndex = ⌊(Z·n + Z + n) / 5⌋ mod 10
 ```
 
 This result shows that, if a single row or column of trees is traversed, moving to an adjacent tree increases the tree's index by **(Z + 1) / 5** (modulo 10), where **Z** is the distance of that row or column from its origin edge (north or west). This means that the closer a row or column is to the edge, the slower the indices of those trees change as the row or column is traversed.
+
+
+## Egg Hatching Module
+
 
 # FAQ
 
@@ -373,6 +379,224 @@ Each module uses its own dedicated slot to avoid collisions if you switch betwee
 | 5 | Static Encounters | Right before talking to the NPC |
 
 Slots 1-2 and 6-9 are free for your own manual use without conflicting with any module.
+
+# Simulating Randomness: RNG Manipulation in Deterministic Emulation
+
+## What "randomness" actually means in software
+
+Almost nothing in software is truly random. What games (and most computer systems) use is a **pseudo-random number generator (PRNG)**—a completely deterministic algorithm that takes some internal state, transforms it with a fixed mathematical formula, and produces output that looks statistically random.
+
+Given the exact same starting state and the exact same sequence of calls, a PRNG produces the exact same "random" output every single time. That's not a bug—it's how PRNGs are built.
+
+On real hardware, this determinism is normally invisible. A PRNG's internal state is usually tied to something like elapsed CPU cycles since power-on, and in real life no two play sessions have identical timing down to the cycle because a human's button presses are never frame-perfect.
+
+The PRNG is still deterministic—it just never sees the same inputs twice, so it *feels* random.
+
+---
+
+## Where this breaks: Deterministic emulation
+
+Tools like **BizHawk** are deliberately engineered for perfect, bit-exact determinism—a core requirement for tool-assisted speedrunning, where a recorded input sequence must replay identically on any machine, forever.
+
+That same property is exactly what breaks "randomness" for automated, reset-based interaction with a game's PRNG:
+
+> Reload the same save state, replay the same inputs, and you get the exact same PRNG state—and therefore the exact same "random" result—every single time.
+
+This isn't specific to any one game; it affects any automation that resets and retries against a deterministic emulator's internal RNG.
+
+---
+
+## Simulating randomness on purpose
+
+Since the natural source of entropy (human timing variance) is gone, an automation script has to manufacture some on purpose.
+
+Typically this is done by deliberately varying frame timing between attempts so the PRNG's state differs each time even though the algorithm itself stays perfectly deterministic.
+
+This is genuinely **simulating randomness**—not generating true entropy, but artificially reintroducing the kind of variance a human would have supplied by accident.
+
+---
+
+## The naive approach, and its hidden trap
+
+The obvious fix is adding a single random delay after each reset.
+
+The problem is that if the PRNG's state is tied to a countable deterministic quantity (such as elapsed frames), then a delay of **1–N frames** can only ever reach **N distinct PRNG states**, regardless of how many times the script retries.
+
+A delay range that's too small doesn't merely add "some" randomness—it silently caps how many outcomes are even reachable, potentially locking a script out of ever producing specific rare results.
+
+---
+
+## A better technique: Splitting delays across multiple points
+
+Rather than one large delay (which can guarantee full coverage but at a steep average-time cost), splitting the delay across several different points in the automation sequence produces significantly better coverage per unit of waiting time.
+
+Each delay is separated by real game logic, such as:
+
+- Button presses
+- Dialogue
+- Animations
+- Menu transitions
+
+Testing consistently showed that adding more split points across genuinely different moments closed the gap toward true random-like behavior far more efficiently than one large combined delay.
+
+---
+
+## Honest limitations
+
+This approach **cannot mathematically prove 100% coverage**.
+
+Since the emulator is fully deterministic, every specific combination of delays always maps to one fixed outcome.
+
+The automation samples random combinations—it does **not** exhaustively test every possible combination.
+
+There is therefore no guarantee that every possible outcome has a reachable path through any particular delay strategy.
+
+Real hardware has the exact same philosophical limitation.
+
+A physical Game Boy's RNG isn't "true" random either—it's exactly as deterministic as an emulator's, just seeded by genuinely unpredictable human timing instead of scripted delays.
+
+Neither approach is provably complete.
+
+What **can** be measured is whether the observed distribution behaves like ordinary statistical randomness or whether it shows obvious structural bias—for example, a very small set of outcomes repeating constantly no matter how long the automation runs.
+
+That distinction is empirically testable, even if complete coverage is not.
+
+---
+
+# Case Study: Pokémon Gen 1 & Gen 2 Soft Reset Automation
+
+Applying the above concepts to a real example.
+
+Gen 1/2's RNG (documented by the **pokecrystal** disassembly project and the TAS/speedrunning community) is updated using the Game Boy hardware register **rDIV**, representing the upper 8 bits of a continuously incrementing 16-bit CPU cycle counter.
+
+```text
+hRandomAdd += rDIV
+hRandomSub -= rDIV
+```
+
+This updates every time the game's `Random()` function is called and once every V-Blank.
+
+Because it is CPU-cycle-based rather than simply incremented once per frame, it provides genuinely high entropy—not a small repeating cycle.
+
+Automated soft resetting (reload → check → reset → repeat) runs directly into the deterministic problem described above.
+
+Measured from real automated console logs:
+
+| Split Points | Delay | Unique / Total | Coverage | Worst Repeat |
+|--------------|-------|---------------:|---------:|-------------:|
+| 1 | 1–30 frames | ~20 / 80 | ~25% | Severe clustering |
+| 2 | 1–256 each | 193 / 270 | 71.5% | 5× |
+| 4 | 1–256 each | 234 / 249 | 94.0% | 3× |
+| 8 | 1–256 each | 248 / 251 | 98.8% | 2× |
+
+The theoretical ceiling for perfectly uniform randomness at this sample size is approximately **99.8%**.
+
+Using **8 split points** reached **98.8%**, placing it within roughly one percentage point of ideal randomness—a difference consistent with normal statistical variation rather than obvious structural bias.
+
+Average added delay was roughly **1,000 frames**, corresponding to only a few seconds at normal speed and effectively instantaneous while fast-forwarding.
+
+---
+
+### The "True Randomness" checkbox
+
+Soft-reset modules (**Starters** and **Egg**) include a **True Randomness** option.
+
+#### Off (default)
+
+- Fast
+- ~98.8% empirically measured DV coverage
+- Ideal for shiny hunting
+
+Since there are **8 shiny DV combinations out of 65,536**, the small remaining coverage gap is extremely unlikely to exclude all shiny combinations.
+
+#### On
+
+- Significantly slower
+- Uses one delay of **65,536+ frames**
+- Mathematically guarantees reaching every possible DV combination given enough time
+
+This mode is intended specifically for hunting unique DV combinations such as:
+
+- Perfect DVs (**15/15/15/15**)
+- Perfect Negative DVs (**0/0/0/0**)
+
+where only **one** valid combination exists.
+
+Whether the fast mode already reaches one of these rare combinations depends entirely on the individual save file.
+
+It might.
+
+It might not.
+
+There is no way to know in advance.
+
+Enabling **True Randomness** removes that uncertainty at the cost of substantially longer reset times.
+
+---
+
+### A small aside: Determinism in miniature
+
+The entire RNG manipulation problem ultimately comes down to one simple rule:
+
+> **Same input → same result.**
+
+Give a PRNG the same starting state and the same sequence of calls, and it will always produce identical output.
+
+Everything described above—the split delays, the coverage testing, and the True Randomness checkbox—exists solely to deliberately vary those inputs instead of replaying identical ones.
+
+This project ends up illustrating a broader concept:
+
+### Deterministic chaos
+
+The RNG is fully known.
+
+We can literally read the formula.
+
+Yet it still *feels* unpredictable because we, as an external script, cannot control timing precisely enough to predict the exact starting conditions every attempt.
+
+Nothing about the system is actually random.
+
+The unpredictability comes entirely from imperfect control over its initial conditions.
+
+This is the same reason classical systems like:
+
+- Dice rolls
+- Coin flips
+- Weather
+
+appear random despite being governed by deterministic physics.
+
+Newtonian mechanics never stops applying to a tumbling coin.
+
+"Randomness" in those cases is simply a statement about our own ignorance—not about the system itself lacking a cause.
+
+Worth noting:
+
+This says **nothing** about whether quantum mechanics contains fundamentally irreducible randomness or whether hidden-variable theories might ultimately describe reality.
+
+That remains an open question in modern physics.
+
+Our RNG is unquestionably deterministic because we can inspect the algorithm directly.
+
+This project is therefore a demonstration of **classical determinism disguised as randomness**, not evidence for or against quantum interpretations.
+
+---
+
+### Applying this elsewhere
+
+Any automation that repeatedly resets against a deterministic emulator's RNG encounters the same fundamental problem.
+
+The general recipe is:
+
+1. Confirm that repeated resets produce identical outcomes.
+2. Introduce random timing delays.
+3. Verify empirically that the results actually become more diverse.
+4. If one delay still produces limited variety, split it across multiple distinct points instead of simply making one delay larger.
+5. Measure actual coverage using real sample data rather than assuming the solution worked.
+
+The important part is **measurement**.
+
+Don't assume a timing strategy is effective simply because it contains "random" delays—verify that the observed distribution actually behaves like randomness.
 
 ## Roadmap
 
