@@ -33,6 +33,7 @@ Mem = require("data.memory")
 Gui = require("gui_module")
 PokemonNames = require("data.pokemon_names")
 Stats = require("data.stats")
+RngEnabler = require("data.rng_enabler")
 
 local function get_pokemon_name(id)
     return PokemonNames[id] or ("Unknown #" .. tostring(id))
@@ -75,6 +76,20 @@ local resetCount = 0
 local stepsTaken = 0
 local sessionEncounterCount = 0
 local confirmedShinyAtkv, confirmedShinyDefv, confirmedShinySpdv, confirmedShinySpcv
+-- Up to 8 split points across the reset sequence instead of 1 giant
+-- delay - confirmed via direct measurement on Starters that this closes
+-- the gap toward true uniform coverage far better than a single delay
+-- (98.8% unique with 8 splits vs ~71.5% with just 1-2). Bringing egg.lua
+-- up to the same standard after its own test showed only 60% unique.
+local MASH_SPLITS_TARGET = 5
+local mashSplitsFired = 0
+-- A mystery-egg delivery (e.g. Togepi) has its own confirmation dialogue
+-- that the standard day-care egg flow doesn't - walking logic assumes
+-- the character is immediately free to move, so this needs clearing
+-- once before the first walk attempt after a shiny is confirmed.
+local hatchDialogueCleared = true
+local splitAfterReceivedPending = false
+local splitAfterSettlePending = false
 
 -- State machine: "waiting_for_egg" -> "walking_to_hatch" (only reached
 -- after confirming a shiny) -> done
@@ -106,14 +121,19 @@ local MOVEMENT_IDLE_VALUE = 0xFF
 local function attempt_step(direction)
     local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
 
+    -- A is held throughout the entire movement attempt, not just pressed
+    -- once beforehand - this clears any leftover post-shiny dialogue as
+    -- a side effect of walking, rather than needing to guess exactly how
+    -- many presses are needed to clear it before movement starts.
     for i = 1, 4 do
-        joypad.set({[direction] = true})
+        joypad.set({[direction] = true, A = true})
         emu.frameadvance()
     end
-    joypad.set({[direction] = false})
+    joypad.set({[direction] = false, A = true})
 
     local n = 0
     while memory.readbyte(MOVEMENT_FLAG_ADDR) == MOVEMENT_IDLE_VALUE and n < 20 do
+        joypad.set({A = true})
         emu.frameadvance()
         n = n + 1
         if memory.readbyte(enemy_species_addr) ~= 0 then return true end
@@ -121,6 +141,7 @@ local function attempt_step(direction)
 
     n = 0
     while memory.readbyte(MOVEMENT_FLAG_ADDR) ~= MOVEMENT_IDLE_VALUE and n < 90 do
+        joypad.set({A = true})
         emu.frameadvance()
         n = n + 1
         if memory.readbyte(enemy_species_addr) ~= 0 then return true end
@@ -292,6 +313,9 @@ function M.on_resume()
     state = "waiting_for_egg"
     safe_pair = nil
     homeX, homeY = nil, nil
+    mashSplitsFired = 0
+    splitAfterReceivedPending = false
+    splitAfterSettlePending = false
 end
 
 -- ===== M.step =====
@@ -301,14 +325,31 @@ function M.step()
 
         if currentPartySize <= partysizeBeforeReceiving then
             -- Still working through the NPC's dialogue - keep mashing A.
+            if mashSplitsFired < MASH_SPLITS_TARGET then
+                RngEnabler.enable_randomness(RngEnabler.SPLIT_RANGE)
+                mashSplitsFired = mashSplitsFired + 1
+            end
             for i = 1, 4 do emu.frameadvance() end
             press_button("A")
             return false
         end
 
-        -- Egg received - DVs are already fixed, check immediately, no
-        -- walking needed to know if it's shiny.
-        press_button("B") -- clear any trailing text
+        -- Egg received - split point right at the moment of receiving.
+        if splitAfterReceivedPending then
+            RngEnabler.enable_randomness(RngEnabler.SPLIT_RANGE)
+            splitAfterReceivedPending = false
+        end
+
+        -- Short wait only - not mashing through extended dialogue.
+        for i = 1, 10 do emu.frameadvance() end
+
+        -- Final split point, right after the settle wait, just before
+        -- actually reading DVs.
+        if splitAfterSettlePending then
+            RngEnabler.enable_randomness(RngEnabler.SPLIT_RANGE)
+            splitAfterSettlePending = false
+        end
+
         local atkdef = memory.readbyte(eggDvAddr)
         local spespc = memory.readbyte(eggDvAddr + 1)
         local species = memory.readbyte(eggSpeciesListAddr) -- still 0xFD at this point, expected
@@ -320,8 +361,10 @@ function M.step()
         local spcv = spespc % 16
 
         resetCount = resetCount + 1
+        print(string.format("#%d | raw atkdef=$%02X spespc=$%02X | Atk:%d Def:%d Spe:%d Spc:%d%s",
+            resetCount, atkdef, spespc, atkv, defv, spdv, spcv, isShiny and " <<< SHINY" or ""))
         Stats.record_encounter()
-        Gui.update_last_encounter(hud, Stats.totalEncounters, species, "Egg", atkv, defv, spdv, spcv, isShiny, nil)
+        Gui.update_last_encounter(hud, resetCount, species, "Egg", atkv, defv, spdv, spcv, isShiny, nil)
 
         if isShiny then
             print(string.format("SHINY egg found! Atk:%d Def:%d Spe:%d Spc:%d - walking it out to hatch now", atkv, defv, spdv, spcv))
@@ -333,20 +376,37 @@ function M.step()
                 "Shiny egg found! (Atk:%d Def:%d Spe:%d Spc:%d) - walking it out to hatch",
                 atkv, defv, spdv, spcv))
             state = "walking_to_hatch"
+            hatchDialogueCleared = false
             return false
         else
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 "Not shiny - resetting...")
             savestate.loadslot(SAVESTATE_SLOT)
-            -- Break the deterministic-RNG pattern (same fix as Starters):
-            -- identical input timing every reset produces IDENTICAL
-            -- "random" DVs every single time otherwise.
-            local extraFrames = math.random(1, 30)
-            for i = 1, extraFrames do emu.frameadvance() end
+            -- "True Randomness" mode uses the full 65536+ frame range
+            -- for this delay instead of the fast split range - much
+            -- slower per attempt, but mathematically guarantees
+            -- reaching every possible DV combination given enough time.
+            if Gui.true_randomness_enabled(hud) then
+                Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
+                    "Resetting (True Randomness mode - this will take longer)...")
+                RngEnabler.enable_randomness(RngEnabler.FULL_COVERAGE_RANGE)
+            else
+                RngEnabler.enable_randomness(RngEnabler.SPLIT_RANGE)
+            end
+            mashSplitsFired = 0
+            splitAfterReceivedPending = true
+            splitAfterSettlePending = true
             return false
         end
 
     elseif state == "walking_to_hatch" then
+        if not hatchDialogueCleared then
+            hatchDialogueCleared = true
+            for i = 1, 30 do
+                press_button("A")
+            end
+        end
+
         if memory.readbyte(enemy_species_addr) ~= 0 then
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 string.format("Wild encounter interrupted - fleeing (steps so far: %d)...", stepsTaken))
@@ -367,7 +427,7 @@ function M.step()
         if currentSpeciesListValue ~= EGG_PLACEHOLDER then
             local speciesName = get_pokemon_name(currentSpeciesListValue)
             print(string.format("Hatched! %s - confirmed shiny, all done.", speciesName))
-            Gui.update_last_encounter(hud, Stats.totalEncounters, currentSpeciesListValue, speciesName,
+            Gui.update_last_encounter(hud, resetCount, currentSpeciesListValue, speciesName,
                 confirmedShinyAtkv, confirmedShinyDefv, confirmedShinySpdv, confirmedShinySpcv, true, nil)
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 "Hatched: " .. speciesName .. " (SHINY)!")

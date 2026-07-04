@@ -24,6 +24,7 @@ local DISABLEABLE_FIELDS = {
     "chkStopSpecies", "txtSpeciesId",
     "chkStopItem", "txtItemFilter",
     "chkKillMode", "txtKillFilter",
+    "chkTrueRandomness",
 }
 
 -- Re-enables everything, then disables only the given list. Call this
@@ -136,6 +137,14 @@ function M.create(existingForm, yOffset, disabledFields)
     forms.setproperty(widgets.chkVerbose, "Width", 380)
     y = y + 26
 
+    widgets.chkTrueRandomness = forms.checkbox(existingForm, "True Randomness (soft-reset modules only)", 10, y)
+    forms.setproperty(widgets.chkTrueRandomness, "Width", 380)
+    y = y + 20
+    widgets.lblTrueRandomnessHint1 = forms.label(existingForm, "(much slower - guarantees full DV range", 28, y, 380, 16)
+    y = y + 16
+    widgets.lblTrueRandomnessHint2 = forms.label(existingForm, "coverage, for hunting 15/15/15/15 or 0/0/0/0)", 28, y, 380, 16)
+    y = y + 26
+
     widgets.bottomY = y
 
     M.reconfigure(widgets, disabledFields)
@@ -234,6 +243,10 @@ end
 
 function M.verbose_logging(w)
     return forms.ischecked(w.chkVerbose)
+end
+
+function M.true_randomness_enabled(w)
+    return forms.ischecked(w.chkTrueRandomness)
 end
 
 return M

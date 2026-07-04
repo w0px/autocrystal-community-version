@@ -79,6 +79,12 @@ end
 
 local atkdef, spespc, species, item
 local shinyvalue = 0
+-- Set true once per new battle (in the hook that only fires on a genuine
+-- new encounter, not per turn). PP reads as stale for a couple of frames
+-- right when a battle menu first loads - this ensures we only wait for
+-- it to settle ONCE, on the actual first turn, not on every turn of an
+-- ongoing multi-turn battle (where PP is already accurate from the start).
+local pendingBattleSettle = false
 local stopRequested = false
 local stopReason = ""
 local realEncounterConfirmed = false
@@ -95,10 +101,31 @@ local MENU_CURSOR_Y = 0xCFA9
 local MENU_CURSOR_X = 0xCFAA
 local RUN_CURSOR = {y = 2, x = 2}
 local FIRST_MOVE_PP_ADDR = 0xC634
+-- Verified via pokecrystal.sym symbol file: wBattleMonHP/wBattleMonMaxHP,
+-- same fixed (non-bank-switched) region as FIRST_MOVE_PP_ADDR above.
+local OWN_HP_ADDR = 0xC63C
+local OWN_MAX_HP_ADDR = 0xC63E
+-- Flee instead of attacking if HP drops below this fraction of max -
+-- a safety margin above the game's own "red bar" threshold, so there's
+-- room to actually flee before a possible next hit could faint us.
+local LOW_HP_FLEE_THRESHOLD = 0.25
 
 local dv_flag_addr, species_addr, item_addr
 
+-- Own Pokemon's HP can exceed 255 at higher levels, so this is a 16-bit
+-- read, not a single byte like the PP check.
+local function has_safe_hp()
+    local currentHP = memory.read_u16_be(OWN_HP_ADDR)
+    local maxHP = memory.read_u16_be(OWN_MAX_HP_ADDR)
+    if maxHP == 0 then return true end -- avoid divide-by-zero if read too early
+    return (currentHP / maxHP) > LOW_HP_FLEE_THRESHOLD
+end
+
 local function shiny(atkdef, spespc)
+    -- IMPORTANT: reset every call, not just set on a hit - otherwise
+    -- shinyvalue stays 1 forever after the first real shiny, silently
+    -- flagging every subsequent encounter as shiny too.
+    shinyvalue = 0
     if spespc == 0xAA then
         if atkdef == 0x2A or atkdef == 0x3A or atkdef == 0x6A or atkdef == 0x7A or atkdef == 0xAA or atkdef == 0xBA or atkdef == 0xEA or atkdef == 0xFA then
             shinyvalue = 1
@@ -182,10 +209,22 @@ local function do_kill_turn()
     vprint("Pressing A to use first move")
     press_button("A")
 
+    -- TIMEOUT: a "would you like to learn a new move?" or evolution
+    -- prompt does not re-trigger the battle-menu hook this loop is
+    -- waiting on, so without a limit here it can loop forever - which
+    -- prevents Stop from working (step() never returns control to the
+    -- launcher while stuck in an internal loop). If hit, signal the
+    -- caller to stop the bot entirely rather than guess navigation.
     have_battle_controls = false
+    local postAttackWait = 0
     while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
         emu.frameadvance()
         press_button("A")
+        postAttackWait = postAttackWait + 1
+        if postAttackWait > 600 then
+            print("Stuck after attacking for 600+ frames (likely a move-learn or evolution prompt) - stopping so you can handle it manually")
+            return "stuck"
+        end
     end
 end
 
@@ -230,6 +269,7 @@ local function register_hooks()
     Mem.RegisterROMHook(EnemyWildmonInitialized, function()
         if ActiveModuleName ~= "fishing" then return end
         realEncounterConfirmed = true
+        pendingBattleSettle = true
         vprint("combat started")
         item = memory.readbyte(item_addr)
         atkdef = memory.readbyte(enemy_addr)
@@ -256,7 +296,7 @@ function M.init(sharedForm, yOffset, existingHud)
     region = memory.readbyte(0x142)
 
     hud = existingHud
-    Gui.reconfigure(hud, {}) -- fishing encounters vary by species/item just like wild ones - nothing to disable
+    Gui.reconfigure(hud, {"chkTrueRandomness"}) -- fishing uses every encounter-related field; True Randomness only applies to soft-reset modules
 
     if version == 0x54 then
         if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
@@ -315,7 +355,7 @@ end
 
 function M.on_switch_to()
     register_hooks()
-    Gui.reconfigure(hud, {})
+    Gui.reconfigure(hud, {"chkTrueRandomness"})
     Gui.clear_last_encounter(hud)
 end
 
@@ -339,7 +379,7 @@ function M.step()
         Stats.record_encounter()
 
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Checking encounter...")
-        Gui.update_last_encounter(hud, Stats.totalEncounters, species, speciesName, atkDV, defDV, speDV, spcDV, isShinyEncounter, itemName)
+        Gui.update_last_encounter(hud, sessionEncounterCount, species, speciesName, atkDV, defDV, speDV, spcDV, isShinyEncounter, itemName)
 
         if isShinyEncounter then
             Stats.record_shiny()
@@ -442,18 +482,34 @@ function M.step()
                 press_button("B")
             end
 
+            -- PP reads as stale for a couple of frames immediately after
+            -- a NEW battle menu first loads, before settling to its real
+            -- value. Only wait for this ONCE per battle. Note:
+            -- species_addr can transiently flicker to 0 for a single
+            -- frame right at battle start, so this wait does NOT bail
+            -- out early on that check - doing so previously cut the
+            -- wait short after just 1 frame.
+            if pendingBattleSettle then
+                pendingBattleSettle = false
+                for i = 1, 30 do
+                    emu.frameadvance()
+                end
+            end
+
             local killFilterTokens = Gui.kill_species_filter(hud)
             local killAllowedForThisSpecies = species_matches_filter(killFilterTokens, species, get_pokemon_name(species))
             local hasPP = memory.readbyte(FIRST_MOVE_PP_ADDR) > 0
+            local hpSafe = has_safe_hp()
 
-            if Gui.kill_non_shiny(hud) and killAllowedForThisSpecies and hasPP then
+            if Gui.kill_non_shiny(hud) and killAllowedForThisSpecies and hasPP and hpSafe then
                 Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Attacking...")
-                do_kill_turn()
-            else
-                if Gui.kill_non_shiny(hud) and killAllowedForThisSpecies and not hasPP then
-                    print("First move has 0 PP - fleeing instead of attacking")
+                local killResult = do_kill_turn()
+                if killResult == "stuck" then
+                    Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount,
+                        "Stopped - move-learn or evolution prompt needs your input")
+                    return true
                 end
-
+            else
                 Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Fleeing battle...")
 
                 local nav_attempts = 0
