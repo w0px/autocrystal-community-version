@@ -373,17 +373,15 @@ function M.step()
         Gui.update_last_encounter(hud, resetCount, species, "Egg", atkv, defv, spdv, spcv, isShiny, nil)
 
         if isShiny then
-            print(string.format("SHINY egg found! Atk:%d Def:%d Spe:%d Spc:%d - walking it out to hatch now", atkv, defv, spdv, spcv))
+            print(string.format("SHINY egg found! Atk:%d Def:%d Spe:%d Spc:%d - stopping here, walk it out to hatch yourself", atkv, defv, spdv, spcv))
             confirmedShinyAtkv, confirmedShinyDefv, confirmedShinySpdv, confirmedShinySpcv = atkv, defv, spdv, spcv
             Stats.record_shiny()
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
-                "SHINY egg found! Walking to hatch...")
+                "SHINY egg found! Stopped - walk it out to hatch yourself.")
             send_discord_notification(string.format(
-                "Shiny egg found! (Atk:%d Def:%d Spe:%d Spc:%d) - walking it out to hatch",
+                "Shiny egg found! (Atk:%d Def:%d Spe:%d Spc:%d) - walk it out to hatch",
                 atkv, defv, spdv, spcv))
-            state = "walking_to_hatch"
-            hatchDialogueCleared = false
-            return false
+            return true
         else
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 "Not shiny - resetting...")
