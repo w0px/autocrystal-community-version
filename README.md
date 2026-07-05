@@ -22,10 +22,13 @@
 - [Functions](#functions)
 - [How to Run](#how-to-run)
 - [Modules](#modules)
-  - [Wild Encounters Module](#wild-encountes-module)
+  - [Wild Encountes Module](#wild-encountes-module)
   - [Starters Module](#starters-module)
   - [Headbutt Module](#headbutt-module)
   - [Egg Hatching Module](#egg-hatching-module)
+  - [Static Module](#static-module)
+  - [Gamecorner Module](#gamecorner-module)
+  - [Friendship Module](#friendship-module)
 - [FAQ](#faq)
   - [Supported Versions](#supported-versions)
   - [Transferring Save Files from One Emulator to Another](#transferring-save-files-from-one-emulator-to-another)
@@ -34,6 +37,7 @@
   - [Savestate Slot Usage](#savestate-slot-usage)
   - [Simulating Randomness: RNG Manipulation in Deterministic Emulation](#simulating-randomness-rng-manipulation-in-deterministic-emulation)
   - [Case Study: Pokémon Gen 1 & Gen 2 Soft Reset Automation](#case-study-pokémon-gen-1--gen-2-soft-reset-automation)
+  - [How Headbutt Trees work in Gen 2](#how-headbutt-trees-work-in-gen-2)
 - [Roadmap](#roadmap)
 
   
@@ -63,7 +67,7 @@
 - Automatic Level Grinding
 - Targeted Encounter Hunting
 
-### Static Encounter Hunting 🟡
+### Static Encounter Hunting ✅
 - Shiny Detection
 - Perfect DV Detection
 - Perfect Negative DV Detection
@@ -78,11 +82,22 @@
 - Automatic Level Grinding
 - Targeted Encounter Hunting
 
-### Egg Hunting 🟡
+### Egg Hatching ✅
 - Shiny Detection
 - Perfect DV Detection
 - Perfect Negative DV Detection
 - Discord Notifications
+
+### Gamecorner Module ✅
+- Shiny Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+
+### Friendship ✅
+- Auto Grinds Pokemon Friendship via Walking
+- Friendship Tracking
+- Discord Notifications once 220 Friendship is reached
 
 
 
@@ -108,7 +123,6 @@ https://github.com/TASEmulators/BizHawk/releases/
 
 - in the launcher select a module you want to run
 <img width="463" height="405" alt="image" src="https://github.com/user-attachments/assets/8359c386-c4a6-47a1-bcca-45ea3dcd2b3c" />
-
 
 
 
@@ -186,62 +200,39 @@ Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 
 <img width="504" height="475" alt="image" src="https://github.com/user-attachments/assets/4ab1a4a0-e977-4c50-8edd-9a53b675d07a" />
 
-### How Headbutt Trees work in Gen 2
-
-A tree's identity is permanently fixed, not random per attempt. Which encounter table a tree draws from (and its encounter rate — some trees are 80%, some 50%, some as low as 10% "rare") is determined by a formula using your Trainer ID plus that tree's exact map coordinates. It's baked into your save file the moment that tree exists on the map — it never rotates, never moves to a different tree, and doesn't change between attempts.
-Trees don't deplete. Unlike the HGSS remakes (where a tree that gives nothing on the first try stays empty forever), Gen 2's mechanic has no exhaustion at all — every headbuttable tree has some nonzero encounter chance, permanently, no matter how many times you've already hit it. There are 3 Types of Trees Forest Group, City Group and Mountain Group, all with unique [encounters](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree).
-
-## Encounter Mechanics
-
-[Source](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree)
-
-The encounter rate and encounter table of each tree depends on the tree's index and the player's **Trainer ID number**.
-
-The tree's index is an integer from **0 to 9**, which depends on its **X** and **Y** coordinates on the map—that is, its distance from the westernmost and northernmost edges, respectively. Specifically, the tree's index is calculated using the following formula:
-
-```
-TreeIndex = ⌊(X·Y + X + Y) / 5⌋ mod 10
-```
-
-The encounter rate and tree type depends on the last digit of the player's Trainer ID.
-
-- If a tree's index is equal to that ID digit, the tree is a **"high-encounter tree"** and its encounter rate is **80%**.
-- If the tree's index is one of the next four indices after that ID digit (wrapping back around to 0 after 9), the tree is a **"moderate-encounter tree"** and its encounter rate is **50%**.
-- Otherwise, the tree is a **"moderate-encounter tree"** and its encounter rate is **10%**.
-- High Encounter Trees can be calculated [here](http://tshadowknight.com/Headbutt%20Grid.htm)
-
-## Encounter Rate by Index and Trainer ID
-
-The following is a table depicting the encounter rate of the tree, based on the tree index and the last digit of the player's Trainer ID. Tree indexes are displayed in rows, while Trainer ID digits are displayed in columns.
-
-An **80%** encounter rate indicates the tree is a **"high-encounter tree"**. Otherwise it is a **"moderate-encounter tree"**.
-
-| Tree Index | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
-|------------|---|---|---|---|---|---|---|---|---|---|
-| **0** | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% |
-| **1** | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% |
-| **2** | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% |
-| **3** | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% |
-| **4** | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% |
-| **5** | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% |
-| **6** | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% |
-| **7** | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% |
-| **8** | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% |
-| **9** | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% |
-
-## Analysis
-
-Since **X** and **Y** are interchangeable in the tree index formula, it is possible to "fix" one dimension to consider traveling along the other. Substituting **Z** for the fixed axis and **n** for the axis that will be traversed, the formula becomes:
-
-```
-TreeIndex = ⌊(Z·n + Z + n) / 5⌋ mod 10
-          = ⌊((Z + 1)·n + Z) / 5⌋ mod 10
-```
-
-This result shows that, if a single row or column of trees is traversed, moving to an adjacent tree increases the tree's index by **(Z + 1) / 5** (modulo 10), where **Z** is the distance of that row or column from its origin edge (north or west). This means that the closer a row or column is to the edge, the slower the indices of those trees change as the row or column is traversed.
 
 
 ## Egg Hatching Module
+
+- position infront of the NPC handing you the egg, don't interact
+- the bot will stop once an egg with a shiny Pokémon is obtained
+- Walk it until it hatches
+
+<img width="356" height="243" alt="image" src="https://github.com/user-attachments/assets/8e8dea01-cea2-42c9-978e-138991556db5" />
+
+  
+## Static Module
+
+- position infront of the NPC handing you the Pokèmon / position infront of the static encounter, don't interact
+
+<img width="461" height="359" alt="image" src="https://github.com/user-attachments/assets/947e7e38-c76b-47b9-b353-cb216d83628d" />
+
+## Gamecorner Module
+
+- position infront of the Vendor and pre-select the Pokémon you want to hunt without interacting
+
+<img width="967" height="828" alt="image" src="https://github.com/user-attachments/assets/7fd545d5-67f2-4428-83cb-de90d3784331" />
+
+
+
+## Friendship Module
+
+- Automatically grinds Pokémon Friendship by walking
+- Every **500 steps**, the friendship of all Pokémon in the party increases by **1**
+- Displays the friendship value of the **first Pokémon in the party** in the GUI
+- Sends a Discord notification once **220 Friendship** is reached
+
+<img width="249" height="261" alt="image" src="https://github.com/user-attachments/assets/9d475e9d-b7f9-41c9-930f-7672828408a8" />
 
 
 # FAQ
@@ -597,6 +588,61 @@ The general recipe is:
 The important part is **measurement**.
 
 Don't assume a timing strategy is effective simply because it contains "random" delays—verify that the observed distribution actually behaves like randomness.
+
+## How Headbutt Trees work in Gen 2
+
+A tree's identity is permanently fixed, not random per attempt. Which encounter table a tree draws from (and its encounter rate — some trees are 80%, some 50%, some as low as 10% "rare") is determined by a formula using your Trainer ID plus that tree's exact map coordinates. It's baked into your save file the moment that tree exists on the map — it never rotates, never moves to a different tree, and doesn't change between attempts.
+Trees don't deplete. Unlike the HGSS remakes (where a tree that gives nothing on the first try stays empty forever), Gen 2's mechanic has no exhaustion at all — every headbuttable tree has some nonzero encounter chance, permanently, no matter how many times you've already hit it. There are 3 Types of Trees Forest Group, City Group and Mountain Group, all with unique [encounters](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree).
+
+### Encounter Mechanics
+
+[Source](https://bulbapedia.bulbagarden.net/wiki/Headbutt_tree)
+
+The encounter rate and encounter table of each tree depends on the tree's index and the player's **Trainer ID number**.
+
+The tree's index is an integer from **0 to 9**, which depends on its **X** and **Y** coordinates on the map—that is, its distance from the westernmost and northernmost edges, respectively. Specifically, the tree's index is calculated using the following formula:
+
+```
+TreeIndex = ⌊(X·Y + X + Y) / 5⌋ mod 10
+```
+
+The encounter rate and tree type depends on the last digit of the player's Trainer ID.
+
+- If a tree's index is equal to that ID digit, the tree is a **"high-encounter tree"** and its encounter rate is **80%**.
+- If the tree's index is one of the next four indices after that ID digit (wrapping back around to 0 after 9), the tree is a **"moderate-encounter tree"** and its encounter rate is **50%**.
+- Otherwise, the tree is a **"moderate-encounter tree"** and its encounter rate is **10%**.
+- High Encounter Trees can be calculated [here](http://tshadowknight.com/Headbutt%20Grid.htm)
+
+### Encounter Rate by Index and Trainer ID
+
+The following is a table depicting the encounter rate of the tree, based on the tree index and the last digit of the player's Trainer ID. Tree indexes are displayed in rows, while Trainer ID digits are displayed in columns.
+
+An **80%** encounter rate indicates the tree is a **"high-encounter tree"**. Otherwise it is a **"moderate-encounter tree"**.
+
+| Tree Index | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|------------|---|---|---|---|---|---|---|---|---|---|
+| **0** | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% |
+| **1** | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% |
+| **2** | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% | 50% |
+| **3** | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% | 50% |
+| **4** | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% | 10% |
+| **5** | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% | 10% |
+| **6** | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% | 10% |
+| **7** | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% | 10% |
+| **8** | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% | 10% |
+| **9** | 10% | 10% | 10% | 10% | 10% | 50% | 50% | 50% | 50% | 80% |
+
+### Analysis
+
+Since **X** and **Y** are interchangeable in the tree index formula, it is possible to "fix" one dimension to consider traveling along the other. Substituting **Z** for the fixed axis and **n** for the axis that will be traversed, the formula becomes:
+
+```
+TreeIndex = ⌊(Z·n + Z + n) / 5⌋ mod 10
+          = ⌊((Z + 1)·n + Z) / 5⌋ mod 10
+```
+
+This result shows that, if a single row or column of trees is traversed, moving to an adjacent tree increases the tree's index by **(Z + 1) / 5** (modulo 10), where **Z** is the distance of that row or column from its origin edge (north or west). This means that the closer a row or column is to the edge, the slower the indices of those trees change as the row or column is traversed.
+
 
 ## Roadmap
 
