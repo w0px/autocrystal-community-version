@@ -33,9 +33,10 @@ local MODULES = {
     { name = "Starters", module = "starters", available = true, art = "launcher_art4.png" },
     { name = "Fishing", module = "fishing", available = true, art = "launcher_art5.png" },
     { name = "Headbutt", module = "headbutt", available = true, art = "launcher_art6.png" },
+    { name = "Friendship", module = "friendship", available = true, art = "launcher_art8.png" },
 }
 
-local shell = forms.newform(460, 900, "autocrystal Launcher")
+local shell = forms.newform(460, 900, "AutoCrystal Launcher")
 forms.setlocation(shell, 100, 100)
 
 forms.label(shell, "Select a mode:", 10, 10, 200, 20)

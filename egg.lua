@@ -253,7 +253,14 @@ function M.init(sharedForm, yOffset, existingHud)
     -- relay isn't actually listening, the call can hang indefinitely
     -- with no error - freezing the whole bot silently. 3 seconds is
     -- generous for a localhost request but bounds the wait.
-    comm.httpSetTimeout(3000)
+    -- Wrapped in pcall: BizHawk keeps one persistent HttpClient for
+    -- its whole process lifetime, and .NET only allows setting Timeout
+    -- BEFORE the first request is ever sent on that client. Once any
+    -- Discord notification has been sent, later script restarts (same
+    -- BizHawk session) would hard-crash here without this pcall, since
+    -- a request has already started. Safe to ignore failure - the
+    -- timeout is already set from whenever it first succeeded.
+    pcall(function() comm.httpSetTimeout(3000) end)
 
     Stats.load()
 

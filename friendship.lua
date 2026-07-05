@@ -1,0 +1,480 @@
+-- friendship.lua
+-- Walks the character back and forth continuously to raise friendship
+-- (walking increases happiness for every party member simultaneously in
+-- Gen 2, not just one). Tracks and displays all party members' current
+-- friendship live, with slot 1 specifically treated as the evolution
+-- target - stops once slot 1 reaches the 220 threshold. Flees any wild
+-- encounter that interrupts walking, same as egg.lua's walk-to-hatch
+-- phase.
+--
+-- Verified via pokecrystal.sym: wPartyMon1Happiness ($DCFA) and
+-- wPartyMon2Happiness ($DD2A) confirm the per-slot happiness formula
+-- used below covers every party member, not just the first.
+-- Evolution threshold confirmed at 220 (multiple independent sources) -
+-- happiness-based evolutions (Golbat->Crobat, Chansey->Blissey, Eevee->
+-- Espeon/Umbreon, Pichu/Cleffa/Igglybuff/Togepi's baby evolutions)
+-- trigger on the NEXT level up once happiness reaches this value -
+-- reaching 220 alone doesn't evolve it immediately.
+--
+-- Discord notification fires only once, when the TARGET (slot 1)
+-- reaches the threshold - not on every individual increase across the
+-- party (which would be far too frequent given how often walking ticks
+-- happiness up).
+
+local M = {}
+
+local script_path = debug.getinfo(1, "S").source:sub(2)
+local script_dir = script_path:match("(.*[/\\])") or "./"
+package.path = script_dir .. "?.lua;" .. script_dir .. "?/init.lua;" .. script_dir .. "../?.lua;" .. package.path
+
+Gui = require("gui_module")
+Stats = require("data.stats")
+PokemonNames = require("data.pokemon_names")
+
+local function get_pokemon_name(id)
+    return PokemonNames[id] or ("Unknown #" .. tostring(id))
+end
+
+local hud
+
+local function vprint(msg)
+    if Gui.verbose_logging(hud) then
+        print(msg)
+    end
+end
+
+local DISCORD_RELAY_URL = "http://127.0.0.1:5000/"
+
+local function send_discord_notification(message)
+    if not Gui.discord_enabled(hud) then return end
+    local safeMessage = message:gsub('"', '\\"')
+    local payload = string.format('{"content": "%s"}', safeMessage)
+    local ok, response = pcall(comm.httpPost, DISCORD_RELAY_URL, payload)
+    if ok then
+        print("Discord notification sent, response: " .. tostring(response))
+    else
+        print("Discord notification failed: " .. tostring(response))
+    end
+end
+
+-- Stuck detection: tracks real-world time since the bot last made
+-- genuine progress (a successful nudge cycle, or fleeing an
+-- interrupting wild encounter) - NOT raw position, since a successful
+-- nudge cycle deliberately returns to the exact same "home" tile every
+-- time by design, which would make raw position look "unchanged"
+-- constantly even when everything is working perfectly.
+local STUCK_THRESHOLD_SECONDS = 300
+local lastProgressTime = nil
+local stuckNotificationSent = false
+
+local function mark_progress()
+    lastProgressTime = os.time()
+    stuckNotificationSent = false
+end
+
+local function check_stuck_and_notify()
+    if lastProgressTime == nil then
+        lastProgressTime = os.time()
+        return
+    end
+    if not stuckNotificationSent and os.time() - lastProgressTime >= STUCK_THRESHOLD_SECONDS then
+        stuckNotificationSent = true
+        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck", STUCK_THRESHOLD_SECONDS))
+        send_discord_notification(string.format(
+            "Potentially stuck: no walking progress for over %d minutes.",
+            math.floor(STUCK_THRESHOLD_SECONDS / 60)))
+    end
+end
+
+local EVOLUTION_THRESHOLD = 220
+-- Verified via pokecrystal.sym: wPartyMon1Happiness ($DCFA) and
+-- wPartyMon2Happiness ($DD2A) are both exactly 0x23 bytes past their
+-- respective party_base_addr + slot*0x30 offset, confirming this
+-- formula covers every slot, not just the first.
+local HAPPINESS_OFFSET = 0x23
+local PARTY_MON_SIZE = 0x30
+
+local enemy_species_addr
+local party_base_addr
+local lastFriendshipBySlot = {} -- slotIndex (0-based) -> last known value
+local targetPokemonName = "?" -- slot 1 specifically, the evolution target
+
+local function happiness_addr(slotIndex)
+    return party_base_addr + HAPPINESS_OFFSET + slotIndex * PARTY_MON_SIZE
+end
+
+local function species_addr(slotIndex)
+    return party_base_addr + 1 + slotIndex
+end
+
+local lastFriendship -- slot 1 specifically, the evolution target
+local thresholdNotified = false
+local stepsTaken = 0
+local sessionIncreaseCount = 0
+
+local function press_button(btn)
+    local input = {[btn] = true}
+    for i = 1, 4 do
+        joypad.set(input)
+        emu.frameadvance()
+    end
+    emu.frameadvance()
+end
+
+-- ===== Movement (verbatim from egg.lua/wild.lua's proven drift-proof
+-- system) =====
+local MOVEMENT_FLAG_ADDR = 0xD4DD
+local MOVEMENT_IDLE_VALUE = 0xFF
+
+local function attempt_step(direction)
+    local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+
+    for i = 1, 4 do
+        joypad.set({[direction] = true})
+        emu.frameadvance()
+    end
+    joypad.set({[direction] = false})
+
+    local n = 0
+    while memory.readbyte(MOVEMENT_FLAG_ADDR) == MOVEMENT_IDLE_VALUE and n < 20 do
+        emu.frameadvance()
+        n = n + 1
+        if memory.readbyte(enemy_species_addr) ~= 0 then return true end
+    end
+
+    n = 0
+    while memory.readbyte(MOVEMENT_FLAG_ADDR) ~= MOVEMENT_IDLE_VALUE and n < 90 do
+        emu.frameadvance()
+        n = n + 1
+        if memory.readbyte(enemy_species_addr) ~= 0 then return true end
+    end
+
+    local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    return (endX ~= startX or endY ~= startY)
+end
+
+local safe_pair = nil
+local homeX, homeY = nil, nil
+
+local function walk_toward_home()
+    local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    if curX == homeX and curY == homeY then return true end
+
+    if curX < homeX then
+        attempt_step("Right")
+    elseif curX > homeX then
+        attempt_step("Left")
+    elseif curY < homeY then
+        attempt_step("Down")
+    elseif curY > homeY then
+        attempt_step("Up")
+    end
+
+    if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+    curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    return (curX == homeX and curY == homeY)
+end
+
+local function find_safe_pair(verbose)
+    local anchorX, anchorY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local candidates = {
+        {out = "Right", back = "Left"},
+        {out = "Left",  back = "Right"},
+        {out = "Down",  back = "Up"},
+        {out = "Up",    back = "Down"},
+    }
+
+    for _, pair in ipairs(candidates) do
+        local movedOut = attempt_step(pair.out)
+        if memory.readbyte(enemy_species_addr) ~= 0 then return nil end
+
+        -- If the character wasn't already facing this direction, the
+        -- first press just turns them (no actual step) - a second
+        -- press of the same direction, now that they're facing it,
+        -- should actually walk. Confirmed via testing: a manual press
+        -- unstuck the bot exactly this way.
+        if not movedOut then
+            movedOut = attempt_step(pair.out)
+            if memory.readbyte(enemy_species_addr) ~= 0 then return nil end
+        end
+
+        if movedOut then
+            local movedBack = attempt_step(pair.back)
+            if memory.readbyte(enemy_species_addr) ~= 0 then return nil end
+
+            if not movedBack then
+                movedBack = attempt_step(pair.back)
+                if memory.readbyte(enemy_species_addr) ~= 0 then return nil end
+            end
+
+            local nowX, nowY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+            if movedBack and nowX == anchorX and nowY == anchorY then
+                vprint(string.format("Found safe zero-drift pair: %s / %s", pair.out, pair.back))
+                return pair
+            else
+                anchorX, anchorY = nowX, nowY
+            end
+        end
+    end
+
+    return nil
+end
+
+local failed_pair_attempts = 0
+
+local function do_nudge_cycle()
+    local madeRealProgress = false
+
+    if homeX == nil then
+        homeX, homeY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        vprint(string.format("Anchoring home tile at X=%d Y=%d", homeX, homeY))
+    end
+
+    if safe_pair == nil then
+        local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        if curX ~= homeX or curY ~= homeY then
+            local reachedHome = walk_toward_home()
+            if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+            if not reachedHome then return true end
+        end
+
+        local verbose = Gui.verbose_logging(hud) and (failed_pair_attempts % 20 == 0)
+        safe_pair = find_safe_pair(verbose)
+        if safe_pair == nil and memory.readbyte(enemy_species_addr) == 0 then
+            failed_pair_attempts = failed_pair_attempts + 1
+        else
+            madeRealProgress = (safe_pair ~= nil)
+        end
+    else
+        local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local movedOut = attempt_step(safe_pair.out)
+        if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+        if not movedOut then
+            -- Same turn-then-walk retry as find_safe_pair - if
+            -- something turned the character to face a different
+            -- direction since the last cycle, this first press just
+            -- turns again rather than actually stepping.
+            movedOut = attempt_step(safe_pair.out)
+            if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+        end
+        local movedBack = attempt_step(safe_pair.back)
+        if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+        if not movedBack then
+            movedBack = attempt_step(safe_pair.back)
+            if memory.readbyte(enemy_species_addr) ~= 0 then return false end
+        end
+
+        local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local trulyReturned = (endX == startX and endY == startY)
+        madeRealProgress = movedOut and movedBack and trulyReturned
+
+        -- Reset the pair any time it stops actually working - whether
+        -- it drifted somewhere unexpected, OR (the bug this comment
+        -- fixes) it just turned in place without moving at all. Without
+        -- this second case, a pair that stops working (e.g. an
+        -- interruption reset the facing direction) gets retried forever
+        -- with the bot spinning in place, never re-validating via
+        -- find_safe_pair() again.
+        if not madeRealProgress then
+            safe_pair = nil
+        end
+    end
+
+    return madeRealProgress
+end
+
+local function friendship_labels(value)
+    return string.format("Target: %s - Friendship: %d", targetPokemonName, value),
+        string.format("Threshold: %d", EVOLUTION_THRESHOLD),
+        string.format("Still needed: %d", math.max(0, EVOLUTION_THRESHOLD - value)),
+        (value >= EVOLUTION_THRESHOLD) and "READY - level up to evolve" or "-"
+end
+
+-- Walking raises happiness for every party member simultaneously, not
+-- just slot 1 - the snapshot shows all of them live, since only
+-- tracking the evolution target alone would hide that the rest of the
+-- party is progressing too. Recent timestamped increases are appended
+-- below the snapshot in the same 8-line display, so both are visible
+-- at once rather than choosing one or the other.
+local recentIncreaseLog = {}
+
+local function build_party_display()
+    local partyCount = memory.readbyte(party_base_addr)
+    local lines = {}
+    for slotIndex = 0, partyCount - 1 do
+        local name = get_pokemon_name(memory.readbyte(species_addr(slotIndex)))
+        local value = memory.readbyte(happiness_addr(slotIndex))
+        local marker = (slotIndex == 0) and " [TARGET]" or ""
+        local readyFlag = (value >= EVOLUTION_THRESHOLD) and "  READY!" or ""
+        lines[#lines + 1] = string.format("%-10s %3d/%d%s%s", name, value, EVOLUTION_THRESHOLD, marker, readyFlag)
+    end
+
+    if #recentIncreaseLog > 0 then
+        lines[#lines + 1] = "---- Recent increases ----"
+        for i = 1, #recentIncreaseLog do
+            if #lines >= 8 then break end
+            lines[#lines + 1] = recentIncreaseLog[i]
+        end
+    end
+
+    return lines
+end
+
+-- ===== M.init: runs once =====
+-- Nothing here relates to species/DVs/items/kill-mode/RNG splitting,
+-- since there's no resetting involved at all - just continuous walking.
+local DISABLED_FIELDS = {
+    "chkStopSpecies", "txtSpeciesId",
+    "chkStopItem", "txtItemFilter",
+    "chkKillMode", "txtKillFilter",
+    "chkTrueRandomness",
+    "chkStopPerfect", "chkStopNegative",
+}
+
+function M.init(sharedForm, yOffset, existingHud)
+    -- See egg.lua/wild.lua for why this is wrapped in pcall - safe to
+    -- ignore failure if it was already set successfully earlier in
+    -- this same BizHawk session.
+    pcall(function() comm.httpSetTimeout(3000) end)
+
+    Stats.load()
+
+    local version = memory.readbyte(0x141)
+    local region = memory.readbyte(0x142)
+
+    if version == 0x54 then
+        if region == 0x4A then
+            enemy_species_addr = 0xd23d + 0x22
+            party_base_addr = 0xDC9D
+        else
+            enemy_species_addr = 0xd20c + 0x22
+            party_base_addr = 0xDCD7
+        end
+    elseif version == 0x55 or version == 0x58 then
+        if region == 0x4A then
+            enemy_species_addr = 0xd9e8 + 0x22
+            party_base_addr = 0xD9E8
+        elseif region == 0x4B then
+            enemy_species_addr = 0xdb1f + 0x22
+            party_base_addr = 0xDB1F
+        else
+            enemy_species_addr = 0xda22 + 0x22
+            party_base_addr = 0xDA22
+        end
+    else
+        print("No valid ROM detected")
+        return false
+    end
+
+    targetPokemonName = get_pokemon_name(memory.readbyte(species_addr(0)))
+
+    hud = existingHud
+    Gui.reconfigure(hud, DISABLED_FIELDS)
+    Gui.set_history_header(hud, "PROGRESS:")
+
+    Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionIncreaseCount,
+        "Ready - stand somewhere safe to walk back and forth, then click Start...")
+    return true
+end
+
+function M.on_switch_to()
+    Gui.reconfigure(hud, DISABLED_FIELDS)
+    Gui.set_history_header(hud, "PROGRESS:")
+    Gui.clear_last_encounter(hud)
+end
+
+-- Called every time Start is clicked. No savestate needed - this just
+-- starts walking from wherever the character currently is.
+function M.on_resume()
+    safe_pair = nil
+    homeX, homeY = nil, nil
+    stepsTaken = 0
+    sessionIncreaseCount = 0
+    thresholdNotified = false
+    recentIncreaseLog = {}
+    lastProgressTime = nil
+    stuckNotificationSent = false
+    targetPokemonName = get_pokemon_name(memory.readbyte(species_addr(0)))
+
+    lastFriendshipBySlot = {}
+    local partyCount = memory.readbyte(party_base_addr)
+    for slotIndex = 0, partyCount - 1 do
+        lastFriendshipBySlot[slotIndex] = memory.readbyte(happiness_addr(slotIndex))
+    end
+    lastFriendship = lastFriendshipBySlot[0]
+
+    print(string.format("[%s] Starting - tracking %d party member(s), target: %s at %d",
+        os.date("%H:%M:%S"), partyCount, targetPokemonName, lastFriendship))
+    local l1, l2, l3, l4 = friendship_labels(lastFriendship)
+    Gui.set_full_history(hud, build_party_display())
+    Gui.set_labels(hud, l1, l2, l3, l4)
+end
+
+-- ===== M.step: one call per frame =====
+function M.step()
+    check_stuck_and_notify()
+
+    if memory.readbyte(enemy_species_addr) ~= 0 then
+        mark_progress()
+        Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionIncreaseCount,
+            string.format("Wild encounter interrupted - fleeing (steps so far: %d)...", stepsTaken))
+        while memory.readbyte(enemy_species_addr) ~= 0 do
+            emu.frameadvance()
+            press_button("B")
+        end
+        safe_pair = nil
+        return false
+    end
+
+    local madeProgress = do_nudge_cycle()
+    if madeProgress then
+        stepsTaken = stepsTaken + 1
+        mark_progress()
+    end
+
+    local partyCount = memory.readbyte(party_base_addr)
+    local anyChanged = false
+    for slotIndex = 0, partyCount - 1 do
+        local current = memory.readbyte(happiness_addr(slotIndex))
+        local previous = lastFriendshipBySlot[slotIndex]
+        if previous ~= nil and current ~= previous then
+            anyChanged = true
+            if current > previous then
+                if slotIndex == 0 then sessionIncreaseCount = sessionIncreaseCount + 1 end
+                local name = get_pokemon_name(memory.readbyte(species_addr(slotIndex)))
+                local logLine = string.format("[%s] %s: %d->%d (+%d)%s",
+                    os.date("%H:%M:%S"), name, previous, current, current - previous,
+                    (slotIndex == 0) and " [T]" or "")
+                print(logLine)
+                table.insert(recentIncreaseLog, 1, logLine)
+                if #recentIncreaseLog > 8 then table.remove(recentIncreaseLog) end
+            end
+        end
+        lastFriendshipBySlot[slotIndex] = current
+    end
+    lastFriendship = lastFriendshipBySlot[0]
+
+    if anyChanged then
+        Gui.set_full_history(hud, build_party_display())
+        local l1, l2, l3, l4 = friendship_labels(lastFriendship)
+        Gui.set_labels(hud, l1, l2, l3, l4)
+    end
+
+    if lastFriendship >= EVOLUTION_THRESHOLD then
+        Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionIncreaseCount,
+            string.format("Friendship threshold reached (%d)! Level up to evolve.", lastFriendship))
+        if not thresholdNotified then
+            thresholdNotified = true
+            send_discord_notification(string.format(
+                "Friendship threshold reached! Current friendship: %d - level up (battle or Rare Candy) to trigger the evolution.",
+                lastFriendship))
+        end
+        return true
+    end
+
+    Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionIncreaseCount,
+        string.format("Walking (friendship: %d, steps: %d)...", lastFriendship, stepsTaken))
+    return false
+end
+
+return M
