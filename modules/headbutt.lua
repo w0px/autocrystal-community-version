@@ -376,6 +376,8 @@ end
 function M.on_resume()
     overworld_settle_frames = 0
     overworld_loaded = false
+    stopRequested = false
+    stopReason = ""
 end
 
 -- ===== M.step =====
@@ -526,47 +528,72 @@ function M.step()
             else
                 Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Fleeing battle...")
 
-                local nav_attempts = 0
-                local ran_away = false
-                while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
-                    local cy = memory.readbyte(MENU_CURSOR_Y)
-                    local cx = memory.readbyte(MENU_CURSOR_X)
+                local escapeAttempts = 0
+                local fledSuccessfully = false
+                while not fledSuccessfully and escapeAttempts < 5 and memory.readbyte(species_addr) ~= 0 do
+                    escapeAttempts = escapeAttempts + 1
 
-                    if cy == RUN_CURSOR.y and cx == RUN_CURSOR.x then
-                        vprint(string.format("Pressing A to select RUN (Y=%d X=%d)", cy, cx))
-                        press_button("A")
-                        ran_away = true
-                        break
-                    else
-                        nav_attempts = nav_attempts + 1
-                        if nav_attempts > 12 then
-                            vprint("Navigation stuck after 12 attempts - backing out with B and stopping this attempt")
-                            press_button("B")
+                    -- CONFIRMED BUG: have_battle_controls gets set false
+                    -- at the end of every attempt (success or failure),
+                    -- but was never waited-on to become true again
+                    -- before retrying - meaning attempts 2+ found the
+                    -- nav loop's condition already false and skipped it
+                    -- entirely, silently doing nothing for the rest of
+                    -- the 5 "attempts". Wait for the menu to genuinely
+                    -- reload (or species_addr to hit 0) before retrying.
+                    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                        emu.frameadvance()
+                        press_button("B")
+                    end
+
+                    local nav_attempts = 0
+                    local ran_away = false
+                    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                        local cy = memory.readbyte(MENU_CURSOR_Y)
+                        local cx = memory.readbyte(MENU_CURSOR_X)
+
+                        if cy == RUN_CURSOR.y and cx == RUN_CURSOR.x then
+                            vprint(string.format("Pressing A to select RUN (Y=%d X=%d)", cy, cx))
+                            press_button("A")
+                            ran_away = true
                             break
+                        else
+                            nav_attempts = nav_attempts + 1
+                            if nav_attempts > 12 then
+                                vprint("Navigation stuck after 12 attempts - backing out with B and stopping this attempt")
+                                press_button("B")
+                                break
+                            end
+                            local next_input = navigate_to_menu_option(RUN_CURSOR)
+                            vprint(string.format("Y=%d X=%d -> pressing %s", cy, cx, next_input))
+                            press_and_wait_for_cursor_change(next_input, 30)
+                            local ny, nx = memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)
+                            if ny == cy and nx == cx then
+                                vprint(string.format("  no change after %s (still Y=%d X=%d) - possible timeout", next_input, ny, nx))
+                            end
                         end
-                        local next_input = navigate_to_menu_option(RUN_CURSOR)
-                        vprint(string.format("Y=%d X=%d -> pressing %s", cy, cx, next_input))
-                        press_and_wait_for_cursor_change(next_input, 30)
-                        local ny, nx = memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)
-                        if ny == cy and nx == cx then
-                            vprint(string.format("  no change after %s (still Y=%d X=%d) - possible timeout", next_input, ny, nx))
+                    end
+
+                    if ran_away then
+                        vprint(string.format("Ran away (attempt %d) - clearing exit text until battle actually ends", escapeAttempts))
+                        local exitWaitFrames = 0
+                        while memory.readbyte(species_addr) ~= 0 and exitWaitFrames < 180 do
+                            emu.frameadvance()
+                            press_button("B")
+                            exitWaitFrames = exitWaitFrames + 1
                         end
+                        if memory.readbyte(species_addr) == 0 then
+                            fledSuccessfully = true
+                            Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Escaped, wrapping up...")
+                        else
+                            vprint(string.format("Escape attempt %d timed out (Can't escape, most likely) - retrying", escapeAttempts))
+                        end
+                        have_battle_controls = false
                     end
                 end
 
-                if ran_away then
-                    vprint("Ran away - clearing exit text until battle actually ends")
-                    Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Escaped, wrapping up...")
-                    local exitWaitFrames = 0
-                    while memory.readbyte(species_addr) ~= 0 and exitWaitFrames < 180 do
-                        emu.frameadvance()
-                        press_button("B")
-                        exitWaitFrames = exitWaitFrames + 1
-                    end
-                    if exitWaitFrames >= 180 then
-                        print("WARNING: species_addr never returned to 0 after running away (180 frame timeout) - continuing anyway")
-                    end
-                    have_battle_controls = false
+                if not fledSuccessfully and memory.readbyte(species_addr) ~= 0 then
+                    print(string.format("WARNING: could not escape after %d attempts - continuing anyway", escapeAttempts))
                 end
             end
         end

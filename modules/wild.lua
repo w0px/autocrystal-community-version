@@ -694,6 +694,8 @@ function M.on_resume()
     overworld_loaded = false
     lastProgressTime = nil
     stuckNotificationSent = false
+    stopRequested = false
+    stopReason = ""
 end
 
 function M.step()
@@ -885,6 +887,18 @@ function M.step()
                 local fledSuccessfully = false
                 while not fledSuccessfully and escapeAttempts < 5 and memory.readbyte(species_addr) ~= 0 do
                     escapeAttempts = escapeAttempts + 1
+
+                    -- Wait for have_battle_controls to become true
+                    -- again before retrying - it gets set false at the
+                    -- end of every attempt (success or failure), so
+                    -- without this, attempts 2+ found the nav loop's
+                    -- condition already false and skipped it entirely,
+                    -- silently doing nothing for the rest of the
+                    -- "attempts".
+                    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                        emu.frameadvance()
+                        press_button("B")
+                    end
 
                     local nav_attempts = 0
                     local ran_away = false
