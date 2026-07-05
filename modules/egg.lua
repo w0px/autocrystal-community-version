@@ -249,6 +249,19 @@ end
 
 -- ===== M.init =====
 function M.init(sharedForm, yOffset, existingHud)
+    -- comm.httpPost has no default timeout, meaning if the Discord
+    -- relay isn't actually listening, the call can hang indefinitely
+    -- with no error - freezing the whole bot silently. 3 seconds is
+    -- generous for a localhost request but bounds the wait.
+    -- Wrapped in pcall: BizHawk keeps one persistent HttpClient for
+    -- its whole process lifetime, and .NET only allows setting Timeout
+    -- BEFORE the first request is ever sent on that client. Once any
+    -- Discord notification has been sent, later script restarts (same
+    -- BizHawk session) would hard-crash here without this pcall, since
+    -- a request has already started. Safe to ignore failure - the
+    -- timeout is already set from whenever it first succeeded.
+    pcall(function() comm.httpSetTimeout(3000) end)
+
     Stats.load()
 
     local version = memory.readbyte(0x141)
@@ -367,17 +380,15 @@ function M.step()
         Gui.update_last_encounter(hud, resetCount, species, "Egg", atkv, defv, spdv, spcv, isShiny, nil)
 
         if isShiny then
-            print(string.format("SHINY egg found! Atk:%d Def:%d Spe:%d Spc:%d - walking it out to hatch now", atkv, defv, spdv, spcv))
+            print(string.format("SHINY egg found! Atk:%d Def:%d Spe:%d Spc:%d - stopping here, walk it out to hatch yourself", atkv, defv, spdv, spcv))
             confirmedShinyAtkv, confirmedShinyDefv, confirmedShinySpdv, confirmedShinySpcv = atkv, defv, spdv, spcv
             Stats.record_shiny()
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
-                "SHINY egg found! Walking to hatch...")
+                "SHINY egg found! Stopped - walk it out to hatch yourself.")
             send_discord_notification(string.format(
-                "Shiny egg found! (Atk:%d Def:%d Spe:%d Spc:%d) - walking it out to hatch",
+                "Shiny egg found! (Atk:%d Def:%d Spe:%d Spc:%d) - walk it out to hatch",
                 atkv, defv, spdv, spcv))
-            state = "walking_to_hatch"
-            hatchDialogueCleared = false
-            return false
+            return true
         else
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 "Not shiny - resetting...")

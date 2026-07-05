@@ -25,6 +25,7 @@ local DISABLEABLE_FIELDS = {
     "chkStopItem", "txtItemFilter",
     "chkKillMode", "txtKillFilter",
     "chkTrueRandomness",
+    "chkStopPerfect", "chkStopNegative",
 }
 
 -- Re-enables everything, then disables only the given list. Call this
@@ -42,6 +43,20 @@ function M.reconfigure(w, disabledFields)
                 forms.setproperty(w[key], "Enabled", false)
             end
         end
+    end
+    if w.lblHistHeader then
+        forms.settext(w.lblHistHeader, "RECENT ENCOUNTERS:")
+    end
+end
+
+-- Lets a module override the history header label (e.g. friendship
+-- tracking calls this with "PROGRESS:" instead). Call AFTER
+-- reconfigure(), since reconfigure always resets it to the default -
+-- otherwise switching away from a module that set a custom label would
+-- leave it stuck showing that label forever.
+function M.set_history_header(w, text)
+    if w.lblHistHeader then
+        forms.settext(w.lblHistHeader, text)
     end
 end
 
@@ -185,6 +200,48 @@ function M.update_last_encounter(w, index, species, speciesName, atk, def, spe, 
     if #w._historyData > 8 then table.remove(w._historyData) end
     for i = 1, 8 do
         forms.settext(w.history[i], w._historyData[i] or "")
+    end
+end
+
+-- Generic variant for modules that don't track species/DV data at all
+-- (e.g. friendship tracking) - writes a single plain-text line into the
+-- same shared history display instead. Also updates the four "Last
+-- Encounter" label fields with whatever text is passed in, so modules
+-- can repurpose them meaningfully instead of leaving stale/irrelevant
+-- text showing from a previous module.
+function M.update_generic_history(w, entryText, label1, label2, label3, label4)
+    if label1 then forms.settext(w.lblLastSpecies, label1) end
+    if label2 then forms.settext(w.lblLastStats, label2) end
+    if label3 then forms.settext(w.lblLastItem, label3) end
+    if label4 then forms.settext(w.lblLastShiny, label4) end
+
+    table.insert(w._historyData, 1, entryText)
+    if #w._historyData > 8 then table.remove(w._historyData) end
+    for i = 1, 8 do
+        forms.settext(w.history[i], w._historyData[i] or "")
+    end
+end
+
+-- Sets just the 4 "Last Encounter" label fields, without touching the
+-- history display at all. For modules that update labels independently
+-- of history (e.g. friendship tracking, which uses set_full_history
+-- separately for the party snapshot).
+function M.set_labels(w, label1, label2, label3, label4)
+    if label1 then forms.settext(w.lblLastSpecies, label1) end
+    if label2 then forms.settext(w.lblLastStats, label2) end
+    if label3 then forms.settext(w.lblLastItem, label3) end
+    if label4 then forms.settext(w.lblLastShiny, label4) end
+end
+
+-- Replaces the entire history display with the given lines (up to 8),
+-- rather than appending one entry to a rolling log. For modules
+-- showing a live snapshot of multiple things at once (e.g. every party
+-- member's current friendship) rather than a chronological history.
+function M.set_full_history(w, lines)
+    w._historyData = {}
+    for i = 1, 8 do
+        w._historyData[i] = lines[i]
+        forms.settext(w.history[i], lines[i] or "")
     end
 end
 

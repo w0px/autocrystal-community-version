@@ -74,6 +74,38 @@ local function send_discord_notification(message)
     end
 end
 
+-- Stuck detection: tracks real-world time since the bot last made
+-- genuine progress (a successful nudge cycle, or being actively engaged
+-- in a battle) - NOT raw position, since a successful nudge cycle
+-- deliberately returns to the exact same "home" tile every time by
+-- design, which would make raw position look "unchanged" constantly
+-- even when everything is working perfectly. If it's been
+-- STUCK_THRESHOLD_SECONDS since the last progress signal, sends a
+-- single Discord alert (not repeated every frame) until progress
+-- happens again, at which point it resets and can fire again later.
+local STUCK_THRESHOLD_SECONDS = 300
+local lastProgressTime = nil
+local stuckNotificationSent = false
+
+local function mark_progress()
+    lastProgressTime = os.time()
+    stuckNotificationSent = false
+end
+
+local function check_stuck_and_notify()
+    if lastProgressTime == nil then
+        lastProgressTime = os.time()
+        return
+    end
+    if not stuckNotificationSent and os.time() - lastProgressTime >= STUCK_THRESHOLD_SECONDS then
+        stuckNotificationSent = true
+        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck", STUCK_THRESHOLD_SECONDS))
+        send_discord_notification(string.format(
+            "Potentially stuck: no movement or battle progress for over %d minutes.",
+            math.floor(STUCK_THRESHOLD_SECONDS / 60)))
+    end
+end
+
 -- ===== Persistent state (shared between M.init and M.step via closure) =====
 
 local desired_species = -1
@@ -553,6 +585,19 @@ end
 -- sits below whatever the launcher put at the top of the window.
 -- Returns true on success, false if this ROM/version isn't supported.
 function M.init(sharedForm, yOffset, existingHud)
+    -- comm.httpPost has no default timeout, meaning if the Discord
+    -- relay isn't actually listening, the call can hang indefinitely
+    -- with no error - freezing the whole bot silently. 3 seconds is
+    -- generous for a localhost request but bounds the wait.
+    -- Wrapped in pcall: BizHawk keeps one persistent HttpClient for
+    -- its whole process lifetime, and .NET only allows setting Timeout
+    -- BEFORE the first request is ever sent on that client. Once any
+    -- Discord notification has been sent, later script restarts (same
+    -- BizHawk session) would hard-crash here without this pcall, since
+    -- a request has already started. Safe to ignore failure - the
+    -- timeout is already set from whenever it first succeeded.
+    pcall(function() comm.httpSetTimeout(3000) end)
+
     Stats.load()
 
     mapgroup, mapnumber = memory.readbyte(0xdcb5), memory.readbyte(0xdcb6)
@@ -647,9 +692,13 @@ function M.on_resume()
     homeX, homeY = nil, nil
     overworld_settle_frames = 0
     overworld_loaded = false
+    lastProgressTime = nil
+    stuckNotificationSent = false
 end
 
 function M.step()
+    check_stuck_and_notify()
+
     if pendingEncounterUpdate then
         pendingEncounterUpdate = false
 
@@ -748,10 +797,13 @@ function M.step()
     end
 
     if overworld_loaded then
-        do_nudge_cycle()
+        if do_nudge_cycle() then
+            mark_progress()
+        end
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Searching for encounters...")
 
     elseif memory.readbyte(species_addr) ~= 0 then
+        mark_progress()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "In battle...")
 
         local dvWaitFrames = 0
@@ -821,47 +873,67 @@ function M.step()
             else
                 Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Fleeing battle...")
 
-                local nav_attempts = 0
-                local ran_away = false
-                while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
-                    local cy = memory.readbyte(MENU_CURSOR_Y)
-                    local cx = memory.readbyte(MENU_CURSOR_X)
+                -- Running from a wild battle in Gen 2 isn't guaranteed to
+                -- succeed - there's a chance-based escape formula, and a
+                -- failed attempt shows "Can't escape!" while the battle
+                -- continues (the enemy gets a turn). Selecting RUN and
+                -- pressing A only confirms we ATTEMPTED to flee, not that
+                -- it worked - so retry the whole sequence if the first
+                -- attempt's exit-wait times out, rather than assuming
+                -- success and getting stuck.
+                local escapeAttempts = 0
+                local fledSuccessfully = false
+                while not fledSuccessfully and escapeAttempts < 5 and memory.readbyte(species_addr) ~= 0 do
+                    escapeAttempts = escapeAttempts + 1
 
-                    if cy == RUN_CURSOR.y and cx == RUN_CURSOR.x then
-                        vprint(string.format("Pressing A to select RUN (Y=%d X=%d)", cy, cx))
-                        press_button("A")
-                        ran_away = true
-                        break
-                    else
-                        nav_attempts = nav_attempts + 1
-                        if nav_attempts > 12 then
-                            vprint("Navigation stuck after 12 attempts - backing out with B and stopping this attempt")
-                            press_button("B")
+                    local nav_attempts = 0
+                    local ran_away = false
+                    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                        local cy = memory.readbyte(MENU_CURSOR_Y)
+                        local cx = memory.readbyte(MENU_CURSOR_X)
+
+                        if cy == RUN_CURSOR.y and cx == RUN_CURSOR.x then
+                            vprint(string.format("Pressing A to select RUN (Y=%d X=%d)", cy, cx))
+                            press_button("A")
+                            ran_away = true
                             break
+                        else
+                            nav_attempts = nav_attempts + 1
+                            if nav_attempts > 12 then
+                                vprint("Navigation stuck after 12 attempts - backing out with B and stopping this attempt")
+                                press_button("B")
+                                break
+                            end
+                            local next_input = navigate_to_menu_option(RUN_CURSOR)
+                            vprint(string.format("Y=%d X=%d -> pressing %s", cy, cx, next_input))
+                            press_and_wait_for_cursor_change(next_input, 30)
+                            local ny, nx = memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)
+                            if ny == cy and nx == cx then
+                                vprint(string.format("  no change after %s (still Y=%d X=%d) - possible timeout", next_input, ny, nx))
+                            end
                         end
-                        local next_input = navigate_to_menu_option(RUN_CURSOR)
-                        vprint(string.format("Y=%d X=%d -> pressing %s", cy, cx, next_input))
-                        press_and_wait_for_cursor_change(next_input, 30)
-                        local ny, nx = memory.readbyte(MENU_CURSOR_Y), memory.readbyte(MENU_CURSOR_X)
-                        if ny == cy and nx == cx then
-                            vprint(string.format("  no change after %s (still Y=%d X=%d) - possible timeout", next_input, ny, nx))
+                    end
+
+                    if ran_away then
+                        vprint(string.format("Ran away (attempt %d) - clearing exit text until battle actually ends", escapeAttempts))
+                        local exitWaitFrames = 0
+                        while memory.readbyte(species_addr) ~= 0 and exitWaitFrames < 180 do
+                            emu.frameadvance()
+                            press_button("B")
+                            exitWaitFrames = exitWaitFrames + 1
                         end
+                        if memory.readbyte(species_addr) == 0 then
+                            fledSuccessfully = true
+                            Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Escaped, wrapping up...")
+                        else
+                            vprint(string.format("Escape attempt %d timed out (Can't escape!, most likely) - retrying", escapeAttempts))
+                        end
+                        have_battle_controls = false
                     end
                 end
 
-                if ran_away then
-                    vprint("Ran away - clearing exit text until battle actually ends")
-                    Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Escaped, wrapping up...")
-                    local exitWaitFrames = 0
-                    while memory.readbyte(species_addr) ~= 0 and exitWaitFrames < 180 do
-                        emu.frameadvance()
-                        press_button("B")
-                        exitWaitFrames = exitWaitFrames + 1
-                    end
-                    if exitWaitFrames >= 180 then
-                        print("WARNING: species_addr never returned to 0 after running away (180 frame timeout) - continuing anyway")
-                    end
-                    have_battle_controls = false
+                if not fledSuccessfully and memory.readbyte(species_addr) ~= 0 then
+                    print(string.format("WARNING: could not escape after %d attempts - continuing anyway", escapeAttempts))
                 end
             end
         end
