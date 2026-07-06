@@ -50,7 +50,8 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 - Automatic Level Grinding
-- Targeted Encounter Hunting
+- Specific Encounter Hunting
+- Stuck Detection & Auto-Recovery
 
 ### Starter Hunting ✅
 - Shiny Detection
@@ -65,7 +66,8 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 - Automatic Level Grinding
-- Targeted Encounter Hunting
+- Specific Encounter Hunting
+- Stuck Detection & Auto-Recovery
 
 ### Static Encounter Hunting ✅
 - Shiny Detection
@@ -80,7 +82,8 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 - Automatic Level Grinding
-- Targeted Encounter Hunting
+- Specific Encounter Hunting
+- Stuck Detection & Auto-Recovery
 
 ### Egg Hatching ✅
 - Shiny Detection
