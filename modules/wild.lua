@@ -94,12 +94,12 @@ end
 
 local function attempt_unstuck_recovery()
     print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
-    for cycle = 1, 5 do
-        for i = 1, 15 do
+    for cycle = 1, 20 do
+        for i = 1, 20 do
             joypad.set({A = true})
             emu.frameadvance()
         end
-        for i = 1, 15 do
+        for i = 1, 10 do
             joypad.set({B = true})
             emu.frameadvance()
         end
@@ -552,15 +552,14 @@ local watchdogLastMoveFrame
 -- time since the CURRENT battle started - if we're still in the same
 -- ongoing battle after BATTLE_WATCHDOG_SECONDS regardless of what's
 -- happening inside it, that's inherently suspicious on its own.
-local BATTLE_WATCHDOG_SECONDS = 90
+local BATTLE_WATCHDOG_SECONDS = 15
 local battleWatchdogStartTime = nil
+local battleWatchdogLastDiagnostic = nil
 local battleWatchdogTriggered = false
 
 local function watchdog_force_unstuck()
     print(string.format("WATCHDOG: no position change for %d+ frames (~30s) regardless of internal state - forcing recovery", WATCHDOG_FRAMES))
-    for i = 1, 30 do
-        press_button("B")
-    end
+    attempt_unstuck_recovery()
     safe_pair = nil
     overworld_settle_frames = 0
     overworld_loaded = false
@@ -729,6 +728,7 @@ function M.on_resume()
     stuckNotificationSent = false
     stopRequested = false
     stopReason = ""
+    shinyvalue = 0
 end
 
 function M.step()
@@ -822,6 +822,7 @@ function M.step()
                 -- this one's.
                 battleWatchdogStartTime = nil
                 battleWatchdogTriggered = false
+                battleWatchdogLastDiagnostic = nil
             end
             overworld_loaded = true
         end
@@ -888,9 +889,16 @@ function M.step()
         end
 
         if memory.readbyte(species_addr) ~= 0 then
-            while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+            -- BOUNDED: if this never becomes true (for any reason),
+            -- this must not loop forever - this runs BEFORE the battle
+            -- watchdog check below even happens, so an unbounded loop
+            -- here would prevent the watchdog from ever getting a
+            -- chance to fire at all.
+            local initialWaitFrames = 0
+            while not have_battle_controls and memory.readbyte(species_addr) ~= 0 and initialWaitFrames < 300 do
                 emu.frameadvance()
                 press_button("B")
+                initialWaitFrames = initialWaitFrames + 1
             end
 
             -- PP reads as stale for a couple of frames immediately after
@@ -938,16 +946,25 @@ function M.step()
                 while not fledSuccessfully and escapeAttempts < 5 and memory.readbyte(species_addr) ~= 0 do
                     escapeAttempts = escapeAttempts + 1
 
-                    -- Wait for have_battle_controls to become true
-                    -- again before retrying - it gets set false at the
-                    -- end of every attempt (success or failure), so
-                    -- without this, attempts 2+ found the nav loop's
-                    -- condition already false and skipped it entirely,
-                    -- silently doing nothing for the rest of the
-                    -- "attempts".
-                    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                    -- Don't rely on have_battle_controls (hook-driven)
+                    -- for retries - the hook watches for the menu
+                    -- LOADING, and after "Can't escape!" the game may
+                    -- return to the same already-open menu without a
+                    -- full reload event, meaning the hook might never
+                    -- re-fire and have_battle_controls could stay false
+                    -- forever. Check the cursor position directly
+                    -- instead, which doesn't depend on any hook at all.
+                    local waitForControlsFrames = 0
+                    while memory.readbyte(species_addr) ~= 0 and waitForControlsFrames < 300 do
+                        local cy0 = memory.readbyte(MENU_CURSOR_Y)
+                        local cx0 = memory.readbyte(MENU_CURSOR_X)
+                        if (cy0 == FIGHT_CURSOR.y or cy0 == RUN_CURSOR.y) and (cx0 == FIGHT_CURSOR.x or cx0 == RUN_CURSOR.x) then
+                            have_battle_controls = true
+                            break
+                        end
                         emu.frameadvance()
                         press_button("B")
+                        waitForControlsFrames = waitForControlsFrames + 1
                     end
 
                     local nav_attempts = 0

@@ -208,6 +208,7 @@ function M.on_resume()
     savestate.saveslot(SAVESTATE_SLOT)
     mashSplitsFired = 0
     pendingEncounterUpdate = false
+    shinyvalue = 0
 end
 
 -- ===== M.step =====

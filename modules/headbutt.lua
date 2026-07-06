@@ -81,18 +81,20 @@ end
 -- so this can't rely on that alone - if we're still in the same
 -- ongoing battle after BATTLE_WATCHDOG_SECONDS, that's inherently
 -- suspicious on its own (e.g. an interrupting phone call mid-fight).
-local BATTLE_WATCHDOG_SECONDS = 90
+local BATTLE_WATCHDOG_SECONDS = 15
 local battleWatchdogStartTime = nil
+local overworldWatchdogStartTime = nil
+local overworldWatchdogTriggered = false
 local battleWatchdogTriggered = false
 
 local function attempt_unstuck_recovery()
     print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
-    for cycle = 1, 5 do
-        for i = 1, 15 do
+    for cycle = 1, 20 do
+        for i = 1, 20 do
             joypad.set({A = true})
             emu.frameadvance()
         end
-        for i = 1, 15 do
+        for i = 1, 10 do
             joypad.set({B = true})
             emu.frameadvance()
         end
@@ -403,6 +405,7 @@ function M.on_resume()
     overworld_loaded = false
     stopRequested = false
     stopReason = ""
+    shinyvalue = 0
 end
 
 -- ===== M.step =====
@@ -484,10 +487,24 @@ function M.step()
     end
 
     if overworld_loaded then
+        if overworldWatchdogStartTime == nil then
+            overworldWatchdogStartTime = os.time()
+            overworldWatchdogTriggered = false
+        elseif not overworldWatchdogTriggered and os.time() - overworldWatchdogStartTime >= BATTLE_WATCHDOG_SECONDS then
+            overworldWatchdogTriggered = true
+            print(string.format("OVERWORLD WATCHDOG: no battle started after %d+ seconds of headbutt attempts - attempting automatic recovery", BATTLE_WATCHDOG_SECONDS))
+            attempt_unstuck_recovery()
+            send_discord_notification(string.format(
+                "Potentially stuck while headbutting: no battle triggered after over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
+                BATTLE_WATCHDOG_SECONDS))
+            overworldWatchdogStartTime = os.time()
+        end
         do_headbutt_cycle()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Headbutt...")
 
     elseif memory.readbyte(species_addr) ~= 0 then
+        overworldWatchdogStartTime = nil
+        overworldWatchdogTriggered = false
         if battleWatchdogStartTime == nil then
             battleWatchdogStartTime = os.time()
             battleWatchdogTriggered = false
@@ -532,9 +549,14 @@ function M.step()
         end
 
         if memory.readbyte(species_addr) ~= 0 then
-            while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+            -- BOUNDED: this runs BEFORE the battle watchdog check
+            -- happens, so an unbounded loop here would prevent the
+            -- watchdog from ever getting a chance to fire at all.
+            local initialWaitFrames = 0
+            while not have_battle_controls and memory.readbyte(species_addr) ~= 0 and initialWaitFrames < 300 do
                 emu.frameadvance()
                 press_button("B")
+                initialWaitFrames = initialWaitFrames + 1
             end
 
             -- PP reads as stale for a couple of frames immediately after
@@ -572,17 +594,25 @@ function M.step()
                 while not fledSuccessfully and escapeAttempts < 5 and memory.readbyte(species_addr) ~= 0 do
                     escapeAttempts = escapeAttempts + 1
 
-                    -- CONFIRMED BUG: have_battle_controls gets set false
-                    -- at the end of every attempt (success or failure),
-                    -- but was never waited-on to become true again
-                    -- before retrying - meaning attempts 2+ found the
-                    -- nav loop's condition already false and skipped it
-                    -- entirely, silently doing nothing for the rest of
-                    -- the 5 "attempts". Wait for the menu to genuinely
-                    -- reload (or species_addr to hit 0) before retrying.
-                    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+                    -- Don't rely on have_battle_controls (hook-driven)
+                    -- for retries - the hook watches for the menu
+                    -- LOADING, and after "Can't escape!" the game may
+                    -- return to the same already-open menu without a
+                    -- full reload event, meaning the hook might never
+                    -- re-fire and have_battle_controls could stay false
+                    -- forever. Check the cursor position directly
+                    -- instead, which doesn't depend on any hook at all.
+                    local waitForControlsFrames = 0
+                    while memory.readbyte(species_addr) ~= 0 and waitForControlsFrames < 300 do
+                        local cy0 = memory.readbyte(MENU_CURSOR_Y)
+                        local cx0 = memory.readbyte(MENU_CURSOR_X)
+                        if (cy0 == FIGHT_CURSOR.y or cy0 == RUN_CURSOR.y) and (cx0 == FIGHT_CURSOR.x or cx0 == RUN_CURSOR.x) then
+                            have_battle_controls = true
+                            break
+                        end
                         emu.frameadvance()
                         press_button("B")
+                        waitForControlsFrames = waitForControlsFrames + 1
                     end
 
                     local nav_attempts = 0
