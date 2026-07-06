@@ -63,13 +63,28 @@ end
 -- nudge cycle deliberately returns to the exact same "home" tile every
 -- time by design, which would make raw position look "unchanged"
 -- constantly even when everything is working perfectly.
-local STUCK_THRESHOLD_SECONDS = 300
+local STUCK_THRESHOLD_SECONDS = 90
 local lastProgressTime = nil
 local stuckNotificationSent = false
 
 local function mark_progress()
     lastProgressTime = os.time()
     stuckNotificationSent = false
+end
+
+local function attempt_unstuck_recovery()
+    print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
+    for cycle = 1, 5 do
+        for i = 1, 15 do
+            joypad.set({A = true})
+            emu.frameadvance()
+        end
+        for i = 1, 15 do
+            joypad.set({B = true})
+            emu.frameadvance()
+        end
+    end
+    joypad.set({})
 end
 
 local function check_stuck_and_notify()
@@ -79,10 +94,12 @@ local function check_stuck_and_notify()
     end
     if not stuckNotificationSent and os.time() - lastProgressTime >= STUCK_THRESHOLD_SECONDS then
         stuckNotificationSent = true
-        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck", STUCK_THRESHOLD_SECONDS))
+        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck, attempting automatic recovery", STUCK_THRESHOLD_SECONDS))
+        attempt_unstuck_recovery()
         send_discord_notification(string.format(
-            "Potentially stuck: no walking progress for over %d minutes.",
-            math.floor(STUCK_THRESHOLD_SECONDS / 60)))
+            "Potentially stuck: no walking progress for over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
+            STUCK_THRESHOLD_SECONDS))
+        lastProgressTime = os.time()
     end
 end
 

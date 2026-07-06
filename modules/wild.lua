@@ -83,13 +83,28 @@ end
 -- STUCK_THRESHOLD_SECONDS since the last progress signal, sends a
 -- single Discord alert (not repeated every frame) until progress
 -- happens again, at which point it resets and can fire again later.
-local STUCK_THRESHOLD_SECONDS = 300
+local STUCK_THRESHOLD_SECONDS = 90
 local lastProgressTime = nil
 local stuckNotificationSent = false
 
 local function mark_progress()
     lastProgressTime = os.time()
     stuckNotificationSent = false
+end
+
+local function attempt_unstuck_recovery()
+    print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
+    for cycle = 1, 5 do
+        for i = 1, 15 do
+            joypad.set({A = true})
+            emu.frameadvance()
+        end
+        for i = 1, 15 do
+            joypad.set({B = true})
+            emu.frameadvance()
+        end
+    end
+    joypad.set({})
 end
 
 local function check_stuck_and_notify()
@@ -99,10 +114,14 @@ local function check_stuck_and_notify()
     end
     if not stuckNotificationSent and os.time() - lastProgressTime >= STUCK_THRESHOLD_SECONDS then
         stuckNotificationSent = true
-        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck", STUCK_THRESHOLD_SECONDS))
+        print(string.format("WARNING: no progress for %d+ seconds - potentially stuck, attempting automatic recovery", STUCK_THRESHOLD_SECONDS))
+        attempt_unstuck_recovery()
         send_discord_notification(string.format(
-            "Potentially stuck: no movement or battle progress for over %d minutes.",
-            math.floor(STUCK_THRESHOLD_SECONDS / 60)))
+            "Potentially stuck: no movement or battle progress for over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
+            STUCK_THRESHOLD_SECONDS))
+        -- Give the recovery attempt a fresh window before considering
+        -- it stuck again, rather than immediately re-triggering.
+        lastProgressTime = os.time()
     end
 end
 
@@ -523,6 +542,20 @@ local WATCHDOG_FRAMES = 1800
 local watchdogLastX, watchdogLastY
 local watchdogLastMoveFrame
 
+-- Separate battle watchdog: the overworld watchdog above can't apply
+-- during battle at all (position is SUPPOSED to stay fixed the whole
+-- time), and the earlier mark_progress()-based approach had the same
+-- blind spot - merely BEING in battle (species_addr ~= 0) is true every
+-- single frame regardless of whether anything's actually happening
+-- within it, so it could never detect a genuinely stuck battle either
+-- (e.g. an interrupting phone call mid-fight). This tracks real-world
+-- time since the CURRENT battle started - if we're still in the same
+-- ongoing battle after BATTLE_WATCHDOG_SECONDS regardless of what's
+-- happening inside it, that's inherently suspicious on its own.
+local BATTLE_WATCHDOG_SECONDS = 90
+local battleWatchdogStartTime = nil
+local battleWatchdogTriggered = false
+
 local function watchdog_force_unstuck()
     print(string.format("WATCHDOG: no position change for %d+ frames (~30s) regardless of internal state - forcing recovery", WATCHDOG_FRAMES))
     for i = 1, 30 do
@@ -784,6 +817,11 @@ function M.step()
                 -- different spot/map while the bot was stopped, and any
                 -- residual drift from the encounter that just ended.
                 safe_pair = nil
+                -- Reset the battle watchdog too, so the next battle
+                -- gets its own fresh start time rather than inheriting
+                -- this one's.
+                battleWatchdogStartTime = nil
+                battleWatchdogTriggered = false
             end
             overworld_loaded = true
         end
@@ -805,6 +843,18 @@ function M.step()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "Searching for encounters...")
 
     elseif memory.readbyte(species_addr) ~= 0 then
+        if battleWatchdogStartTime == nil then
+            battleWatchdogStartTime = os.time()
+            battleWatchdogTriggered = false
+        elseif not battleWatchdogTriggered and os.time() - battleWatchdogStartTime >= BATTLE_WATCHDOG_SECONDS then
+            battleWatchdogTriggered = true
+            print(string.format("BATTLE WATCHDOG: still in the same battle after %d+ seconds - attempting automatic recovery", BATTLE_WATCHDOG_SECONDS))
+            attempt_unstuck_recovery()
+            send_discord_notification(string.format(
+                "Potentially stuck in battle: same encounter still active after over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
+                BATTLE_WATCHDOG_SECONDS))
+            battleWatchdogStartTime = os.time() -- give the recovery attempt a fresh window
+        end
         mark_progress()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "In battle...")
 
