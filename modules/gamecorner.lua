@@ -76,6 +76,7 @@ local resetCount = 0
 -- increases, same read point as the last split.
 local MASH_SPLITS_TARGET = 8
 local mashSplitsFired = 0
+local lastResetTime = nil
 
 local function shiny(atkdef, spespc)
     if spespc == 0xAA then
@@ -145,10 +146,36 @@ function M.on_resume()
     newDvAddr = party_base_addr + 0x1D + newSlotIndex * 0x30
     newSpeciesAddr = party_base_addr + 1 + newSlotIndex
     mashSplitsFired = 0
+    lastResetTime = os.time()
+end
+
+-- If 60 seconds pass without reaching a shiny/not-shiny decision (e.g.
+-- a phone call interrupted the mashing sequence), force the same
+-- reload this module already does every normal cycle anyway - simpler
+-- and more reliable than guessing what recovery input is needed, since
+-- it just goes back to a known-good state unconditionally.
+local STUCK_RESET_TIMEOUT = 60
+local function check_stuck_and_force_reset()
+    if lastResetTime == nil then
+        lastResetTime = os.time()
+        return
+    end
+    if os.time() - lastResetTime >= STUCK_RESET_TIMEOUT then
+        print(string.format("WARNING: no reset for %d+ seconds - likely stuck (phone call, etc). Forcing a reload.", STUCK_RESET_TIMEOUT))
+        send_discord_notification(string.format(
+            "Potentially stuck: no reset for over %d seconds. Forced a reload to recover - check on it if this keeps happening.",
+            STUCK_RESET_TIMEOUT))
+        savestate.loadslot(SAVESTATE_SLOT)
+        partysizeBeforeReceiving = memory.readbyte(party_base_addr)
+        mashSplitsFired = 0
+        lastResetTime = os.time()
+    end
 end
 
 -- ===== M.step =====
 function M.step()
+    check_stuck_and_force_reset()
+
     local currentPartySize = memory.readbyte(party_base_addr)
 
     if currentPartySize <= partysizeBeforeReceiving then
@@ -198,6 +225,7 @@ function M.step()
             "Not shiny - resetting...")
         savestate.loadslot(SAVESTATE_SLOT)
         mashSplitsFired = 0
+        lastResetTime = os.time()
         return false
     end
 end

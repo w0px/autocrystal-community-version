@@ -70,6 +70,8 @@ end
 local SAVESTATE_SLOT = 5 -- separate from Starters' slot 3 and Egg's slot 4
 
 local enemy_addr, species_addr, item_addr
+local party_base_addr
+local partysizeBeforeReceiving
 local LoadBattleMenuAddr, EnemyWildmonInitialized
 local version, region
 
@@ -84,6 +86,7 @@ local pendingEncounterUpdate = false
 -- afterward, so all 8 splits need to land before that hook ever fires.
 local MASH_SPLITS_TARGET = 8
 local mashSplitsFired = 0
+local lastResetTime = nil
 
 local function shiny(atk, sp)
     shinyvalue = 0
@@ -188,6 +191,22 @@ function M.init(sharedForm, yOffset, existingHud)
     species_addr = enemy_addr + 0x22
     item_addr = enemy_addr - 0x05
 
+    -- Gift Pokemon (Eevee, etc.) are structurally different from
+    -- battle-style statics (Sudowoodo, legendary beasts/birds) - they
+    -- go directly into the party via NPC dialogue, never triggering a
+    -- battle at all. The enemy-hook-based detection above never fires
+    -- for these, so party size is tracked too - whichever condition
+    -- fires first (battle starts, or party size increases) determines
+    -- how the result gets read.
+    if version == 0x54 then
+        if region == 0x4A then party_base_addr = 0xDC9D
+        else party_base_addr = 0xDCD7 end
+    elseif version == 0x55 or version == 0x58 then
+        if region == 0x4A then party_base_addr = 0xD9E8
+        elseif region == 0x4B then party_base_addr = 0xDB1F
+        else party_base_addr = 0xDA22 end
+    end
+
     math.randomseed(os.time())
     register_hooks()
 
@@ -209,10 +228,84 @@ function M.on_resume()
     mashSplitsFired = 0
     pendingEncounterUpdate = false
     shinyvalue = 0
+    partysizeBeforeReceiving = memory.readbyte(party_base_addr)
+    lastResetTime = os.time()
+end
+
+-- If 60 seconds pass without reaching a shiny/not-shiny decision (e.g.
+-- a phone call interrupted the mashing sequence), force the same
+-- reload this module already does every normal cycle anyway - simpler
+-- and more reliable than guessing what recovery input is needed, since
+-- it just goes back to a known-good state unconditionally.
+local STUCK_RESET_TIMEOUT = 60
+local function check_stuck_and_force_reset()
+    if lastResetTime == nil then
+        lastResetTime = os.time()
+        return
+    end
+    if os.time() - lastResetTime >= STUCK_RESET_TIMEOUT then
+        print(string.format("WARNING: no reset for %d+ seconds - likely stuck (phone call, etc). Forcing a reload.", STUCK_RESET_TIMEOUT))
+        send_discord_notification(string.format(
+            "Potentially stuck: no reset for over %d seconds. Forced a reload to recover - check on it if this keeps happening.",
+            STUCK_RESET_TIMEOUT))
+        savestate.loadslot(SAVESTATE_SLOT)
+        mashSplitsFired = 0
+        pendingEncounterUpdate = false
+        partysizeBeforeReceiving = memory.readbyte(party_base_addr)
+        lastResetTime = os.time()
+    end
 end
 
 -- ===== M.step =====
 function M.step()
+    check_stuck_and_force_reset()
+
+    -- Gift Pokemon path: party size increased without any battle ever
+    -- starting - read the new slot directly (same formula as
+    -- gamecorner.lua/egg.lua/starters.lua, since this IS a party
+    -- addition, not a wild-style battle).
+    local currentPartySize = memory.readbyte(party_base_addr)
+    if currentPartySize > partysizeBeforeReceiving then
+        resetCount = resetCount + 1
+        local newSlotIndex = partysizeBeforeReceiving
+        local newSpeciesAddr = party_base_addr + 1 + newSlotIndex
+        local newDvAddr = party_base_addr + 0x1D + newSlotIndex * 0x30
+
+        local newSpecies = memory.readbyte(newSpeciesAddr)
+        local speciesName = get_pokemon_name(newSpecies)
+        local newAtkdef = memory.readbyte(newDvAddr)
+        local newSpespc = memory.readbyte(newDvAddr + 1)
+        local atkv = math.floor(newAtkdef / 16)
+        local defv = newAtkdef % 16
+        local spdv = math.floor(newSpespc / 16)
+        local spcv = newSpespc % 16
+        local isShiny = shiny(newAtkdef, newSpespc)
+
+        print(string.format("%s (#%d) | Atk: %d Def: %d Spe: %d Spc: %d", speciesName, newSpecies, atkv, defv, spdv, spcv))
+
+        Stats.record_encounter()
+        Gui.update_last_encounter(hud, resetCount, newSpecies, speciesName, atkv, defv, spdv, spcv, isShiny, "(no item)")
+
+        if isShiny then
+            print(string.format("SHINY gift Pokemon found! %s Atk:%d Def:%d Spe:%d Spc:%d - stopping here",
+                speciesName, atkv, defv, spdv, spcv))
+            Stats.record_shiny()
+            Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
+                "SHINY found! Stopped.")
+            send_discord_notification(string.format(
+                "Shiny gift Pokemon found! %s (Atk:%d Def:%d Spe:%d Spc:%d)", speciesName, atkv, defv, spdv, spcv))
+            return true
+        else
+            Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
+                "Not shiny - resetting...")
+            savestate.loadslot(SAVESTATE_SLOT)
+            mashSplitsFired = 0
+            partysizeBeforeReceiving = memory.readbyte(party_base_addr)
+            lastResetTime = os.time()
+            return false
+        end
+    end
+
     if pendingEncounterUpdate then
         pendingEncounterUpdate = false
         resetCount = resetCount + 1
@@ -243,6 +336,7 @@ function M.step()
                 "Not shiny - resetting...")
             savestate.loadslot(SAVESTATE_SLOT)
             mashSplitsFired = 0
+            lastResetTime = os.time()
             return false
         end
     end

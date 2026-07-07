@@ -83,6 +83,7 @@ local confirmedShinyAtkv, confirmedShinyDefv, confirmedShinySpdv, confirmedShiny
 -- up to the same standard after its own test showed only 60% unique.
 local MASH_SPLITS_TARGET = 5
 local mashSplitsFired = 0
+local lastResetTime = nil
 -- A mystery-egg delivery (e.g. Togepi) has its own confirmation dialogue
 -- that the standard day-care egg flow doesn't - walking logic assumes
 -- the character is immediately free to move, so this needs clearing
@@ -329,10 +330,37 @@ function M.on_resume()
     mashSplitsFired = 0
     splitAfterReceivedPending = false
     splitAfterSettlePending = false
+    lastResetTime = os.time()
+end
+
+-- If 60 seconds pass without reaching a shiny/not-shiny decision (e.g.
+-- a phone call interrupted the mashing sequence), force the same
+-- reload this module already does every normal cycle anyway - simpler
+-- and more reliable than guessing what recovery input is needed, since
+-- it just goes back to a known-good state unconditionally.
+local STUCK_RESET_TIMEOUT = 60
+local function check_stuck_and_force_reset()
+    if lastResetTime == nil then
+        lastResetTime = os.time()
+        return
+    end
+    if os.time() - lastResetTime >= STUCK_RESET_TIMEOUT then
+        print(string.format("WARNING: no reset for %d+ seconds - likely stuck (phone call, etc). Forcing a reload.", STUCK_RESET_TIMEOUT))
+        send_discord_notification(string.format(
+            "Potentially stuck: no reset for over %d seconds. Forced a reload to recover - check on it if this keeps happening.",
+            STUCK_RESET_TIMEOUT))
+        savestate.loadslot(SAVESTATE_SLOT)
+        mashSplitsFired = 0
+        splitAfterReceivedPending = false
+        splitAfterSettlePending = false
+        lastResetTime = os.time()
+    end
 end
 
 -- ===== M.step =====
 function M.step()
+    check_stuck_and_force_reset()
+
     if state == "waiting_for_egg" then
         local currentPartySize = memory.readbyte(party_base_addr)
 
@@ -393,6 +421,7 @@ function M.step()
             Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, resetCount,
                 "Not shiny - resetting...")
             savestate.loadslot(SAVESTATE_SLOT)
+            lastResetTime = os.time()
             -- "True Randomness" mode uses the full 65536+ frame range
             -- for this delay instead of the fast split range - much
             -- slower per attempt, but mathematically guarantees

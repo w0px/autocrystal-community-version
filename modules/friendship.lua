@@ -63,7 +63,7 @@ end
 -- nudge cycle deliberately returns to the exact same "home" tile every
 -- time by design, which would make raw position look "unchanged"
 -- constantly even when everything is working perfectly.
-local STUCK_THRESHOLD_SECONDS = 90
+local STUCK_THRESHOLD_SECONDS = 15
 local lastProgressTime = nil
 local stuckNotificationSent = false
 
@@ -74,12 +74,12 @@ end
 
 local function attempt_unstuck_recovery()
     print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
-    for cycle = 1, 5 do
-        for i = 1, 15 do
+    for cycle = 1, 20 do
+        for i = 1, 20 do
             joypad.set({A = true})
             emu.frameadvance()
         end
-        for i = 1, 15 do
+        for i = 1, 10 do
             joypad.set({B = true})
             emu.frameadvance()
         end
@@ -122,6 +122,18 @@ end
 
 local function species_addr(slotIndex)
     return party_base_addr + 1 + slotIndex
+end
+
+-- If party count ever reads as garbage (e.g. during a phone call, when
+-- this memory region might be temporarily disrupted), looping over
+-- hundreds of invalid slots would compute addresses that overflow
+-- past the valid GB address space entirely, causing a permanent hang.
+-- Clamp to the real valid range (1-6) rather than trusting it blindly.
+local function get_safe_party_count()
+    local raw = memory.readbyte(party_base_addr)
+    if raw < 1 then return 1 end
+    if raw > 6 then return 6 end
+    return raw
 end
 
 local lastFriendship -- slot 1 specifically, the evolution target
@@ -167,6 +179,16 @@ local function attempt_step(direction)
     end
 
     local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    -- A single step should only ever move by 1 tile. A larger jump
+    -- indicates this memory region got corrupted/repurposed for
+    -- something else (same class of corruption seen in the happiness
+    -- bytes during a phone call) rather than genuine movement - don't
+    -- trust it as success, since that would incorrectly reset the
+    -- stuck-timer while nothing real actually happened.
+    local dx, dy = math.abs(endX - startX), math.abs(endY - startY)
+    if dx > 1 or dy > 1 then
+        return false
+    end
     return (endX ~= startX or endY ~= startY)
 end
 
@@ -316,7 +338,7 @@ end
 local recentIncreaseLog = {}
 
 local function build_party_display()
-    local partyCount = memory.readbyte(party_base_addr)
+    local partyCount = get_safe_party_count()
     local lines = {}
     for slotIndex = 0, partyCount - 1 do
         local name = get_pokemon_name(memory.readbyte(species_addr(slotIndex)))
@@ -414,7 +436,7 @@ function M.on_resume()
     targetPokemonName = get_pokemon_name(memory.readbyte(species_addr(0)))
 
     lastFriendshipBySlot = {}
-    local partyCount = memory.readbyte(party_base_addr)
+    local partyCount = get_safe_party_count()
     for slotIndex = 0, partyCount - 1 do
         lastFriendshipBySlot[slotIndex] = memory.readbyte(happiness_addr(slotIndex))
     end
@@ -432,12 +454,27 @@ function M.step()
     check_stuck_and_notify()
 
     if memory.readbyte(enemy_species_addr) ~= 0 then
-        mark_progress()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionIncreaseCount,
             string.format("Wild encounter interrupted - fleeing (steps so far: %d)...", stepsTaken))
-        while memory.readbyte(enemy_species_addr) ~= 0 do
+        -- BOUNDED: this used to have no timeout at all - if something
+        -- like a phone call interrupted here, this ran forever, and
+        -- M.step() could never return for check_stuck_and_notify() to
+        -- get another chance to fire. Break out and let the outer
+        -- stuck-detection (which does a proper alternating A/B
+        -- recovery, better suited to a phone call than B-only mashing)
+        -- handle it if this keeps happening.
+        local fleeWaitFrames = 0
+        while memory.readbyte(enemy_species_addr) ~= 0 and fleeWaitFrames < 300 do
             emu.frameadvance()
             press_button("B")
+            fleeWaitFrames = fleeWaitFrames + 1
+        end
+        -- Only mark progress if the flee actually succeeded - merely
+        -- entering this branch isn't progress, and marking it
+        -- unconditionally would let a genuinely stuck encounter keep
+        -- resetting its own stuck-timer forever.
+        if memory.readbyte(enemy_species_addr) == 0 then
+            mark_progress()
         end
         safe_pair = nil
         return false
@@ -449,27 +486,47 @@ function M.step()
         mark_progress()
     end
 
-    local partyCount = memory.readbyte(party_base_addr)
+    local partyCount = get_safe_party_count()
     local anyChanged = false
+    local corruptionDetected = false
     for slotIndex = 0, partyCount - 1 do
         local current = memory.readbyte(happiness_addr(slotIndex))
         local previous = lastFriendshipBySlot[slotIndex]
         if previous ~= nil and current ~= previous then
-            anyChanged = true
-            if current > previous then
-                if slotIndex == 0 then sessionIncreaseCount = sessionIncreaseCount + 1 end
-                local name = get_pokemon_name(memory.readbyte(species_addr(slotIndex)))
-                local logLine = string.format("[%s] %s: %d->%d (+%d)%s",
-                    os.date("%H:%M:%S"), name, previous, current, current - previous,
-                    (slotIndex == 0) and " [T]" or "")
-                print(logLine)
-                table.insert(recentIncreaseLog, 1, logLine)
-                if #recentIncreaseLog > 8 then table.remove(recentIncreaseLog) end
+            local delta = current - previous
+            if math.abs(delta) > 20 then
+                -- Implausible jump - real friendship gains per step are
+                -- small (1-3). This is direct evidence of memory
+                -- corruption (phone call, etc.), not a real change -
+                -- don't log it, and don't let it poison the stored
+                -- value for future comparisons.
+                corruptionDetected = true
+            else
+                anyChanged = true
+                if delta > 0 then
+                    if slotIndex == 0 then sessionIncreaseCount = sessionIncreaseCount + 1 end
+                    local name = get_pokemon_name(memory.readbyte(species_addr(slotIndex)))
+                    local logLine = string.format("[%s] %s: %d->%d (+%d)%s",
+                        os.date("%H:%M:%S"), name, previous, current, delta,
+                        (slotIndex == 0) and " [T]" or "")
+                    print(logLine)
+                    table.insert(recentIncreaseLog, 1, logLine)
+                    if #recentIncreaseLog > 8 then table.remove(recentIncreaseLog) end
+                end
+                lastFriendshipBySlot[slotIndex] = current
             end
         end
-        lastFriendshipBySlot[slotIndex] = current
     end
     lastFriendship = lastFriendshipBySlot[0]
+
+    if corruptionDetected and not stuckNotificationSent then
+        stuckNotificationSent = true
+        print("WARNING: implausible friendship jump detected - likely memory corruption from a phone call or similar interruption. Attempting immediate recovery.")
+        attempt_unstuck_recovery()
+        send_discord_notification(
+            "Potentially stuck: detected corrupted friendship readings (likely a phone call). Attempted automatic recovery (A/B presses) - check on it if this keeps happening.")
+        lastProgressTime = os.time()
+    end
 
     if anyChanged then
         Gui.set_full_history(hud, build_party_display())

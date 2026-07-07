@@ -285,8 +285,7 @@ local REQUIRED_SETTLE_FRAMES = 10
 -- module registered LAST keeps its hooks active, even after switching to
 -- a "different" module, unless that module re-registers its own. This
 -- must be called every time this module becomes active, not just once.
-local function register_hooks()
-    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
+local function register_hooks()    Mem.RegisterROMHook(LoadBattleMenuAddr, function()
         if ActiveModuleName ~= "fishing" then return end
         have_battle_controls = true
         vprint(string.format("Battle menu loaded | Cursor Y=%d X=%d",
@@ -385,6 +384,7 @@ function M.init(sharedForm, yOffset, existingHud)
     dv_flag_addr = enemy_addr + 0x21
     species_addr = enemy_addr + 0x22
     item_addr = enemy_addr - 0x05
+
 
     register_hooks()
 

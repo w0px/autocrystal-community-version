@@ -13,6 +13,7 @@ Mem = require("data.memory")
 Gui = require("gui_module")
 PokemonNames = require("data.pokemon_names")
 ItemNames = require("data.item_names")
+LevelUpMoves = require("data.level_up_moves")
 
 local hud -- assigned in M.init()
 
@@ -152,6 +153,10 @@ local printedMessage = false
 local enemy_addr
 local LoadBattleMenuAddr
 local EnemyWildmonInitialized
+local LearnMoveAddr
+local learnMovePromptDetected = false
+local party_base_addr
+local curPartyMonAddr
 
 local mapgroup, mapnumber
 local version, region
@@ -186,7 +191,7 @@ local OWN_MAX_HP_ADDR = 0xC63E
 -- room to actually flee before a possible next hit could faint us.
 local LOW_HP_FLEE_THRESHOLD = 0.25
 
-local dv_flag_addr, species_addr, item_addr
+local dv_flag_addr, species_addr, item_addr, enemy_hp_addr
 
 local function shiny(atkdef, spespc)
     -- IMPORTANT: reset every call, not just set on a hit - otherwise
@@ -474,6 +479,50 @@ local have_battle_controls = false
 -- needed, since "kill non-shiny" always wants the first attack.
 local FIGHT_CURSOR = {y = 1, x = 1}
 
+local function get_active_mon_level()
+    local slotIndex = memory.readbyte(curPartyMonAddr)
+    if slotIndex > 5 then slotIndex = 5 end
+    return memory.readbyte(party_base_addr + 0x27 + slotIndex * 0x30)
+end
+
+local function get_active_mon_species()
+    local slotIndex = memory.readbyte(curPartyMonAddr)
+    if slotIndex > 5 then slotIndex = 5 end
+    return memory.readbyte(party_base_addr + 1 + slotIndex)
+end
+
+-- Checks whether the species learns a move at ANY level in
+-- (oldLevel, newLevel] - not just newLevel itself, since a big EXP gain
+-- could jump multiple levels in one hit, and a move-learn at an
+-- intermediate level would otherwise get skipped right past.
+-- +/-1 safety margin: confirmed discrepancy between the disassembly
+-- data and actual retail ROM behavior (Croconaw/Bite - data says level
+-- 21, but the actual US/EU Rev A cartridge shows it already learned at
+-- level 20, confirmed via PP already used on the party screen). Given
+-- missing a move-learn defeats the whole point of this feature, treat
+-- each listed level as potentially off by one in either direction
+-- rather than trusting it as exact.
+local function learns_move_in_range(species, oldLevel, newLevel)
+    local movesetLevels = LevelUpMoves[species]
+    if not movesetLevels then return false end
+    for _, lv in ipairs(movesetLevels) do
+        if lv >= oldLevel and lv <= newLevel + 1 then
+            return true
+        end
+    end
+    return false
+end
+
+-- Persistent across the WHOLE battle, not reset per do_kill_turn()
+-- call - confirmed bug: individual calls can exit (have_battle_controls
+-- becoming true again) before the level-up animation progresses far
+-- enough to observe the change within that one call's own short
+-- execution, and the next call would just re-establish a fresh
+-- baseline from wherever the level already ended up, permanently blind
+-- to whatever happened in between.
+local battleLevelBaseline = nil
+local battleLevelBaselineSpecies = nil
+
 local function do_kill_turn()
     local nav_attempts = 0
     while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
@@ -520,12 +569,70 @@ local function do_kill_turn()
     -- than guess how to navigate a prompt we can't reliably detect.
     have_battle_controls = false
     local postAttackWait = 0
+    -- If the enemy already fainted from this attack, this window
+    -- specifically risks a move-learn or evolution prompt appearing -
+    -- and since we press A every single frame with no way to check
+    -- what's actually being shown, that A would immediately confirm
+    -- "yes, learn this move" and pick whatever move the cursor lands
+    -- on to forget. Use a much shorter timeout in that case to
+    -- minimize the risk window, rather than the full budget used when
+    -- the enemy is still alive (where there's no such risk at all).
+    local enemyFainted = memory.read_u16_be(enemy_hp_addr) == 0
+    local postAttackTimeout = enemyFainted and 300 or 600
+    if battleLevelBaseline == nil then
+        battleLevelBaseline = get_active_mon_level()
+        battleLevelBaselineSpecies = get_active_mon_species()
+    end
+    local levelBeforeAttack = battleLevelBaseline
+    local activeSpecies = battleLevelBaselineSpecies
+    local confirmedHigherLevelFrames = 0
+    local lastSeenLevel = get_active_mon_level()
     while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+        -- Check BEFORE pressing - a move can only be learned on a
+        -- level-up, so the instant level increases, a move-learn
+        -- prompt could be showing right now. Stop before any further A
+        -- press could risk confirming it. This is more reliable than
+        -- hooking the exact LearnMove routine (which never fired - the
+        -- actual call path likely goes through some indirection our
+        -- hook didn't catch) or a timeout (the whole prompt sequence
+        -- completes too fast when mashing A every frame to reliably
+        -- hit any reasonable timeout).
+        --
+        -- Uses the actual verified level-up moveset data (see
+        -- data/level_up_moves.lua) rather than stopping on every
+        -- level-up regardless of whether a move is actually offered -
+        -- a Pokemon only learns new moves at specific levels, not
+        -- every level, so this lets ordinary level-ups with no move
+        -- pass through automatically.
+        if learnMovePromptDetected then
+            print("Move-learn prompt detected - stopping immediately so you can decide (this Pokemon likely also just leveled up).")
+            return "stuck"
+        end
+        local currentLevel = get_active_mon_level()
+        -- Require the SAME level value to be confirmed across 3
+        -- consecutive frames before trusting it - a single read can be
+        -- corrupted during the EXP-gain/level-up animation window
+        -- (confirmed: observed a read of 25->20, which is impossible
+        -- during a real battle, since level can only ever go up).
+        if currentLevel > levelBeforeAttack and currentLevel == lastSeenLevel then
+            confirmedHigherLevelFrames = confirmedHigherLevelFrames + 1
+        else
+            confirmedHigherLevelFrames = (currentLevel > levelBeforeAttack) and 1 or 0
+        end
+        lastSeenLevel = currentLevel
+        if confirmedHigherLevelFrames >= 3 and learns_move_in_range(activeSpecies, levelBeforeAttack, currentLevel) then
+            print(string.format("Level increase to %d - this species learns a move somewhere in that range, a learn-prompt is likely showing. Stopping so you can decide.", currentLevel))
+            return "stuck"
+        end
         emu.frameadvance()
         press_button("A")
         postAttackWait = postAttackWait + 1
-        if postAttackWait > 600 then
-            print("Stuck after attacking for 600+ frames (likely a move-learn or evolution prompt) - stopping so you can handle it manually")
+        if postAttackWait > postAttackTimeout then
+            if enemyFainted then
+                print("Enemy fainted and battle hasn't ended after a short wait - likely a move-learn or evolution prompt. Stopping so you can decide.")
+            else
+                print("Stuck after attacking for 600+ frames (likely a move-learn or evolution prompt) - stopping so you can handle it manually")
+            end
             return "stuck"
         end
     end
@@ -573,6 +680,14 @@ end
 -- a "different" module, unless that module re-registers its own. This
 -- must be called every time this module becomes active, not just once.
 local function register_hooks()
+    if LearnMoveAddr then
+        Mem.RegisterROMHook(LearnMoveAddr, function()
+            if ActiveModuleName ~= "wild" then return end
+            learnMovePromptDetected = true
+            vprint("LearnLevelMoves.learn entered - a move is being learned, stopping A presses")
+        end, "Detect Move-Learn Prompt")
+    end
+
     Mem.RegisterROMHook(LoadBattleMenuAddr, function()
         if ActiveModuleName ~= "wild" then return end
         have_battle_controls = true
@@ -644,16 +759,19 @@ function M.init(sharedForm, yOffset, existingHud)
             enemy_addr = 0xd20c
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
             EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c5) -- LearnLevelMoves.learn
             Mem.SetRomBankAddress("Crystal")
         elseif region == 0x45 then
             enemy_addr = 0xd20c
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
             EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c5) -- LearnLevelMoves.learn
             Mem.SetRomBankAddress("Crystal")
         elseif region == 0x4A then
             enemy_addr = 0xd23d
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4EF2)
             EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7648)
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c5) -- LearnLevelMoves.learn
             Mem.SetRomBankAddress("Crystal")
         end
     elseif version == 0x55 or version == 0x58 then
@@ -690,6 +808,33 @@ function M.init(sharedForm, yOffset, existingHud)
     dv_flag_addr = enemy_addr + 0x21
     species_addr = enemy_addr + 0x22
     item_addr = enemy_addr - 0x05
+    -- Verified via pokecrystal.sym: wEnemyMonHP is +0x0A from the same
+    -- base as enemy_addr (structurally consistent with the standard
+    -- Species+Item+Moves+OT_ID+DVs = 10 bytes before HP layout).
+    enemy_hp_addr = enemy_addr + 0x0A
+
+    -- For the move-learn detection fix: a move can only be learned on
+    -- a level-up, so tracking the active Pokemon's level directly is
+    -- more reliable than trying to hook the exact prompt (which didn't
+    -- work) or guess at timeouts (which also didn't work, since the
+    -- whole sequence completes too fast when mashing A every frame).
+    -- wCurPartyMon (RAM, no bank translation needed) tells us which
+    -- party slot is actually battling - not always slot 0, if an
+    -- earlier Pokemon in this session already fainted.
+    -- Switched from wCurPartyMon ($D109) to wCurBattleMon ($D0D4) -
+    -- confirmed via the game's own DrawPlayerHUD routine, which uses
+    -- wCurBattleMon specifically to determine "which party member's
+    -- data to display during battle" - exactly our use case. The
+    -- wrong variable was very likely why level reads were unreliable.
+    curPartyMonAddr = 0xd0d4
+    if version == 0x54 then
+        if region == 0x4A then party_base_addr = 0xDC9D
+        else party_base_addr = 0xDCD7 end
+    elseif version == 0x55 or version == 0x58 then
+        if region == 0x4A then party_base_addr = 0xD9E8
+        elseif region == 0x4B then party_base_addr = 0xDB1F
+        else party_base_addr = 0xDA22 end
+    end
 
     watchdogLastX, watchdogLastY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
     watchdogLastMoveFrame = emu.framecount()
@@ -729,6 +874,7 @@ function M.on_resume()
     stopRequested = false
     stopReason = ""
     shinyvalue = 0
+    learnMovePromptDetected = false
 end
 
 function M.step()
@@ -823,6 +969,9 @@ function M.step()
                 battleWatchdogStartTime = nil
                 battleWatchdogTriggered = false
                 battleWatchdogLastDiagnostic = nil
+                battleLevelBaseline = nil
+                battleLevelBaselineSpecies = nil
+                learnMovePromptDetected = false
             end
             overworld_loaded = true
         end
@@ -847,14 +996,33 @@ function M.step()
         if battleWatchdogStartTime == nil then
             battleWatchdogStartTime = os.time()
             battleWatchdogTriggered = false
+            -- Capture the level baseline HERE, at the very start of the
+            -- battle, before any attack has happened at all - setting
+            -- this lazily inside do_kill_turn() was too late, since
+            -- that function both executes the attack AND sets up the
+            -- post-attack wait in the same call, so by the time the
+            -- baseline was captured the attack (and any level-up it
+            -- caused) had already happened.
+            battleLevelBaseline = get_active_mon_level()
+            battleLevelBaselineSpecies = get_active_mon_species()
         elseif not battleWatchdogTriggered and os.time() - battleWatchdogStartTime >= BATTLE_WATCHDOG_SECONDS then
             battleWatchdogTriggered = true
-            print(string.format("BATTLE WATCHDOG: still in the same battle after %d+ seconds - attempting automatic recovery", BATTLE_WATCHDOG_SECONDS))
-            attempt_unstuck_recovery()
-            send_discord_notification(string.format(
-                "Potentially stuck in battle: same encounter still active after over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
-                BATTLE_WATCHDOG_SECONDS))
-            battleWatchdogStartTime = os.time() -- give the recovery attempt a fresh window
+            local enemyHP = memory.read_u16_be(enemy_hp_addr)
+            if enemyHP == 0 then
+                print("BATTLE WATCHDOG: enemy has fainted and battle still hasn't ended - likely a move-learn or evolution prompt. Stopping so you can decide.")
+                Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount,
+                    "Stopped - likely a move-learn or evolution prompt needs your input")
+                send_discord_notification(
+                    "Grinding stopped: the enemy fainted but the battle hasn't ended after a while - likely a move-learn or evolution prompt waiting for your input. Handle it manually, then resume.")
+                return true
+            else
+                print(string.format("BATTLE WATCHDOG: still in the same battle after %d+ seconds - attempting automatic recovery", BATTLE_WATCHDOG_SECONDS))
+                attempt_unstuck_recovery()
+                send_discord_notification(string.format(
+                    "Potentially stuck in battle: same encounter still active after over %d seconds. Attempted automatic recovery (A/B presses) - check on it if this keeps happening.",
+                    BATTLE_WATCHDOG_SECONDS))
+                battleWatchdogStartTime = os.time() -- give the recovery attempt a fresh window
+            end
         end
         mark_progress()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount, "In battle...")
@@ -928,6 +1096,7 @@ function M.step()
                 if killResult == "stuck" then
                     Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionEncounterCount,
                         "Stopped - move-learn or evolution prompt needs your input")
+                    send_discord_notification("Grinding stopped: a move-learn or evolution prompt is likely showing and needs your input. Handle it manually, then resume.")
                     return true
                 end
             else

@@ -40,6 +40,20 @@ end
 local hud
 local base_address, versionStr, partysize, dv_addr, species_list_addr
 local atkdef, spespc
+
+local DISCORD_RELAY_URL = "http://127.0.0.1:5000/"
+
+local function send_discord_notification(message)
+    if not Gui.discord_enabled(hud) then return end
+    local safeMessage = message:gsub('"', '\\"')
+    local payload = string.format('{"content": "%s"}', safeMessage)
+    local ok, response = pcall(comm.httpPost, DISCORD_RELAY_URL, payload)
+    if ok then
+        print("Discord notification sent, response: " .. tostring(response))
+    else
+        print("Discord notification failed: " .. tostring(response))
+    end
+end
 local sessionResetCount = 0
 -- Up to 8 split points across the reset sequence instead of 1 giant
 -- delay - each fires once per reset cycle, at a genuinely different
@@ -56,6 +70,7 @@ local sessionResetCount = 0
 -- Split 8 fires right after the final settle wait, just before reading DVs.
 local MASH_SPLITS_TARGET = 5
 local mashSplitsFired = 0
+local lastResetTime = nil
 local splitAfterReceivedPending = false
 local splitAfterSettlePending = false
 
@@ -88,6 +103,13 @@ local DISABLED_FIELDS = {
 }
 
 function M.init(sharedForm, yOffset, existingHud)
+    -- See egg.lua/wild.lua for why this is wrapped in pcall - .NET's
+    -- HttpClient.Timeout can only be set before the first request, and
+    -- BizHawk shares one persistent HttpClient per process, so calling
+    -- this again after a restart (following any notification already
+    -- sent) throws without the pcall.
+    pcall(function() comm.httpSetTimeout(3000) end)
+
     Stats.load()
 
     local version = memory.readbyte(0x141)
@@ -148,10 +170,37 @@ function M.on_resume()
     mashSplitsFired = 0
     splitAfterReceivedPending = false
     splitAfterSettlePending = false
+    lastResetTime = os.time()
+end
+
+-- If 60 seconds pass without reaching a shiny/not-shiny decision (e.g.
+-- a phone call interrupted the mashing sequence), force the same
+-- reload this module already does every normal cycle anyway - simpler
+-- and more reliable than guessing what recovery input is needed, since
+-- it just goes back to a known-good state unconditionally.
+local STUCK_RESET_TIMEOUT = 60
+local function check_stuck_and_force_reset()
+    if lastResetTime == nil then
+        lastResetTime = os.time()
+        return
+    end
+    if os.time() - lastResetTime >= STUCK_RESET_TIMEOUT then
+        print(string.format("WARNING: no reset for %d+ seconds - likely stuck (phone call, etc). Forcing a reload.", STUCK_RESET_TIMEOUT))
+        send_discord_notification(string.format(
+            "Potentially stuck: no reset for over %d seconds. Forced a reload to recover - check on it if this keeps happening.",
+            STUCK_RESET_TIMEOUT))
+        savestate.loadslot(3)
+        mashSplitsFired = 0
+        splitAfterReceivedPending = false
+        splitAfterSettlePending = false
+        lastResetTime = os.time()
+    end
 end
 
 -- ===== M.step: one call per frame =====
 function M.step()
+    check_stuck_and_force_reset()
+
     -- Not received yet - keep mashing A and waiting.
     if memory.readbyte(base_address) == partysize then
         if mashSplitsFired < MASH_SPLITS_TARGET then
@@ -209,16 +258,23 @@ function M.step()
     if isShiny then
         Stats.record_shiny()
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionResetCount, "SHINY FOUND!")
+        send_discord_notification(string.format(
+            "Shiny starter found! %s (Atk:%d Def:%d Spe:%d Spc:%d)", speciesName, atkv, defv, spdv, spcv))
         return true
     elseif Gui.stop_on_perfect(hud) and isPerfect then
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionResetCount, "Perfect DVs found!")
+        send_discord_notification(string.format(
+            "Perfect DVs found! %s (Atk:%d Def:%d Spe:%d Spc:%d)", speciesName, atkv, defv, spdv, spcv))
         return true
     elseif Gui.stop_on_perfect_negative(hud) and isPerfectNegative then
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionResetCount, "Perfect Negative DVs found!")
+        send_discord_notification(string.format(
+            "Perfect Negative DVs found! %s (Atk:%d Def:%d Spe:%d Spc:%d)", speciesName, atkv, defv, spdv, spcv))
         return true
     else
         Gui.update_counts(hud, Stats.totalEncounters, Stats.totalShinies, Stats.encountersSinceShiny, sessionResetCount, "Resetting...")
         savestate.loadslot(3)
+        lastResetTime = os.time()
         -- Up to 8 split points across the reset sequence instead of one
         -- giant wait - this is the first, applied immediately; up to 5
         -- more fire during the dialogue-mash loop, one more right when
