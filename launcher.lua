@@ -29,11 +29,12 @@ Gui = require("gui_module")
 local MODULES = {
     { name = "Wild Encounters", module = "wild", available = true, art = "launcher_art1.png" },
     { name = "Egg Hatching", module = "egg", available = true, art = "launcher_art2.png" },
-    { name = "Static Encounters (coming soon)", module = "static", available = false, art = "launcher_art3.png" },
+    { name = "Static Encounters", module = "static", available = true, art = "launcher_art3.png" },
     { name = "Starters", module = "starters", available = true, art = "launcher_art4.png" },
     { name = "Fishing", module = "fishing", available = true, art = "launcher_art5.png" },
     { name = "Headbutt", module = "headbutt", available = true, art = "launcher_art6.png" },
     { name = "Friendship", module = "friendship", available = true, art = "launcher_art8.png" },
+    { name = "Game Corner", module = "gamecorner", available = true, art = "launcher_art9.png" },
 }
 
 local shell = forms.newform(460, 900, "AutoCrystal Launcher")
