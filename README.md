@@ -154,9 +154,8 @@ Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 
 - Automatically battles non-shiny Pokémon using the first move
 - Species Allowlist to avoid unfavorable matchups, the bot will only battle the Pokemon in the Allowlist (ID or Name)
-- Automatically flees when all PP for the selected move is depleted
-- Automatically cancels Pokémon evolutions
-- Pauses auto-leveling when a Pokémon attempts to learn a new move (unless an empty move slot is available)
+- Automatically flees when all PP for the selected move is depleted or active Pokémon HP is < 20%
+- Pauses Auto-leveling when a Pokémon attempts to learn a new move (unless an empty move slot is available)
 
 <img width="800" height="486" alt="2cd5b3901b2209c85db0407c3c6df5ae-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/138b7d12-612b-4572-a941-e44c0ccc7467" />
 
@@ -194,6 +193,19 @@ Off (default): fast, ~98.8% empirically-measured DV coverage. Plenty for shiny h
 On: much slower (single delay of 65536+ frames instead of the fast split approach), but mathematically guarantees reaching every possible DV combination given enough time. Use this specifically when hunting a single unique target like 15/15/15/15 (Perfect DVs) or 0/0/0/0 (Perfect Negative DVs), where there's only one valid combination and the stakes of a coverage gap are much higher.
 
 Whether the fast "Off" mode happens to already cover a specific rare target like 15/15/15/15 depends on the individual save file - it might, or it might not, with no way to know in advance. "On" removes that uncertainty at the cost of speed.
+
+## Fishing Module
+
+- Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
+- put your fishing rod on the select button --> inventory --> fishing rod --> SEL
+  
+<img width="512" height="410" alt="image" src="https://github.com/user-attachments/assets/bc09182a-441e-47a0-9b63-3ea6fd400329" />
+
+- position infront of a water tile
+
+<img width="357" height="289" alt="image" src="https://github.com/user-attachments/assets/7ce8d36e-e236-4936-b828-6dc3e5480fb1" />
+
+
 
 
 ## Headbutt Module
