@@ -10,7 +10,7 @@
 <h1 align="center">autocrystal</h1>
  
 <p align="center">
-  <b>Pokémon G/S/C Automated Shiny, DV, Item & Level Grinding Toolkit</b><br>
+  <b>Pokémon G/S/C Automated Shiny & perfect DV Hunting, Fishing, Headbutt, Egg, Static, Item & Level Grinding Toolkit</b><br>
   <b>API Project:</b> <a href="https://github.com/w0px/w0p-autocrystal">w0p-autocrystal</a><br>
   <b>Discord:</b> w0p
 </p>
