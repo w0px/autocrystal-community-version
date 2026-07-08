@@ -256,9 +256,9 @@ Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 
 | Game | US | EU | JP |
 |------|:--:|:--:|:--:|
-| Crystal | ✅ | ✅ | ✅ |
-| Silver | ✅ | 🟡 | 🟡 |
-| Gold | ✅ | 🟡 | 🟡 |
+| Crystal | ✅ | ✅ | ❌ |
+| Silver | ✅ | ✅ | ❌  |
+| Gold | ✅ | ✅ | ❌ |
 
 ## Transferring Save Files from one Emulator to another
 
@@ -661,9 +661,6 @@ This result shows that, if a single row or column of trees is traversed, moving 
 
 ## Roadmap
 
-- [ ] Static Encounter Module Testing
-- [ ] Full Support for Gold and Silver EU/NA/JP
-- [ ] Roaming Legendaries Module
 - [ ] Support for ROM Hacks Crystal Clear, Ultimate Crystal
 
 
