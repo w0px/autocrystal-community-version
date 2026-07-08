@@ -25,7 +25,7 @@
   - [Wild Encountes Module](#wild-encountes-module)
   - [Starters Module](#starters-module)
   - [Headbutt Module](#headbutt-module)
-  - [Egg Hatching Module](#egg-hatching-module)
+  - [Egg Module](#egg-hatching-module)
   - [Static Module](#static-module)
   - [Gamecorner Module](#gamecorner-module)
   - [Friendship Module](#friendship-module)
@@ -43,7 +43,7 @@
   
 ## Functions
 
-### Wild Encounter Hunting ✅
+### Wild Encounter Module ✅
 - Shiny Detection
 - Held Item Detection
 - Perfect DV Detection
@@ -53,29 +53,13 @@
 - Specific Encounter Hunting
 - Stuck Detection & Auto-Recovery
 
-### Starter Hunting ✅
+### Starter Module ✅
 - Shiny Detection
 - Perfect DV Detection
 - Perfect Negative DV Detection
 - Discord Notifications
 
-### Fishing Encounter Hunting ✅
-- Shiny Detection
-- Held Item Detection
-- Perfect DV Detection
-- Perfect Negative DV Detection
-- Discord Notifications
-- Automatic Level Grinding
-- Specific Encounter Hunting
-- Stuck Detection & Auto-Recovery
-
-### Static Encounter Hunting ✅
-- Shiny Detection
-- Perfect DV Detection
-- Perfect Negative DV Detection
-- Discord Notifications
-
-### Headbutt Encounter Hunting ✅
+### Fishing Encounter Module ✅
 - Shiny Detection
 - Held Item Detection
 - Perfect DV Detection
@@ -85,7 +69,23 @@
 - Specific Encounter Hunting
 - Stuck Detection & Auto-Recovery
 
-### Egg Hatching ✅
+### Static EncounterModule ✅
+- Shiny Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+
+### Headbutt Encounter Module ✅
+- Shiny Detection
+- Held Item Detection
+- Perfect DV Detection
+- Perfect Negative DV Detection
+- Discord Notifications
+- Automatic Level Grinding
+- Specific Encounter Hunting
+- Stuck Detection & Auto-Recovery
+
+### Egg Module ✅
 - Shiny Detection
 - Perfect DV Detection
 - Perfect Negative DV Detection
@@ -97,7 +97,7 @@
 - Perfect Negative DV Detection
 - Discord Notifications
 
-### Friendship ✅
+### Friendship Module ✅
 - Auto Grinds Pokemon Friendship via Walking
 - Friendship Tracking
 - Discord Notifications once 220 Friendship is reached
