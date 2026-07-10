@@ -174,24 +174,29 @@ local highestAtkDef = 0
 -- four menu positions, and the layout is 1-indexed (not 0-indexed):
 --   FIGHT=(1,1)  PKMN=(1,2)
 --   PACK =(2,1)  RUN =(2,2)
-local MENU_CURSOR_Y = 0xCFA9
-local MENU_CURSOR_X = 0xCFAA
+local MENU_CURSOR_Y, MENU_CURSOR_X
+local wCurItemAddr, wItemsAddr, wNumItemsAddr
+-- Preference order when scanning the bag for something to throw -
+-- Poke Ball specifically preferred (per direct instruction), falling
+-- back to other ball types only if no Poke Balls are left.
+local BALL_ITEM_IDS = {5, 4, 2, 1} -- Poke, Great, Ultra, Master
 local RUN_CURSOR = {y = 2, x = 2}
 
 -- $C634: confirmed via WRAM diffing (before/after using the first move)
 -- to be the in-battle PP counter for the first move slot. Lives in the
 -- fixed WRAM bank ($C000-$CFFF), so no bank-switching concerns reading it.
-local FIRST_MOVE_PP_ADDR = 0xC634
--- Verified via pokecrystal.sym symbol file: wBattleMonHP/wBattleMonMaxHP,
--- same fixed (non-bank-switched) region as FIRST_MOVE_PP_ADDR above.
-local OWN_HP_ADDR = 0xC63C
-local OWN_MAX_HP_ADDR = 0xC63E
+local FIRST_MOVE_PP_ADDR
+-- Verified via pokecrystal.sym/pokegold.sym symbol files: wBattleMonHP/
+-- wBattleMonMaxHP, same fixed (non-bank-switched) region as
+-- FIRST_MOVE_PP_ADDR above.
+local OWN_HP_ADDR
+local OWN_MAX_HP_ADDR
 -- Flee instead of attacking if HP drops below this fraction of max -
 -- a safety margin above the game's own "red bar" threshold, so there's
 -- room to actually flee before a possible next hit could faint us.
 local LOW_HP_FLEE_THRESHOLD = 0.25
 
-local dv_flag_addr, species_addr, item_addr, enemy_hp_addr
+local dv_flag_addr, species_addr, item_addr, enemy_hp_addr, enemy_max_hp_addr
 
 local function shiny(atkdef, spespc)
     -- IMPORTANT: reset every call, not just set on a hit - otherwise
@@ -231,7 +236,8 @@ end
 -- test), returns to 0xFF right as the tile-step completes (~11-12 frames
 -- later on flat ground). This replaces position-polling entirely - no
 -- more guessing how many frames to wait.
-local MOVEMENT_FLAG_ADDR = 0xD4DD
+local MOVEMENT_FLAG_ADDR
+local PLAYER_X_ADDR, PLAYER_Y_ADDR
 local MOVEMENT_IDLE_VALUE = 0xFF
 
 -- Press `direction`, then use the flag to know exactly when the step
@@ -240,7 +246,7 @@ local MOVEMENT_IDLE_VALUE = 0xFF
 -- tells us WHEN to check, the position change tells us WHETHER it
 -- counted as a real step (vs. a blocked bump against a wall/tree).
 local function attempt_step(direction)
-    local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local startX, startY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
 
     for i = 1, 4 do
         joypad.set({[direction] = true})
@@ -262,7 +268,7 @@ local function attempt_step(direction)
         if memory.readbyte(species_addr) ~= 0 then return true end
     end
 
-    local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local endX, endY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     return (endX ~= startX or endY ~= startY)
 end
 
@@ -282,7 +288,7 @@ local homeX, homeY = nil, nil
 
 -- Attempts one step closer to home. Returns true once actually there.
 local function walk_toward_home()
-    local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     if curX == homeX and curY == homeY then return true end
 
     if curX < homeX then
@@ -296,12 +302,12 @@ local function walk_toward_home()
     end
 
     if memory.readbyte(species_addr) ~= 0 then return false end
-    curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     return (curX == homeX and curY == homeY)
 end
 
 local function find_safe_pair(verbose)
-    local anchorX, anchorY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local anchorX, anchorY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     local candidates = {
         {out = "Right", back = "Left"},
         {out = "Left",  back = "Right"},
@@ -317,7 +323,7 @@ local function find_safe_pair(verbose)
             local movedBack = attempt_step(pair.back)
             if memory.readbyte(species_addr) ~= 0 then return nil end
 
-            local nowX, nowY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+            local nowX, nowY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
             if movedBack and nowX == anchorX and nowY == anchorY then
                 vprint(string.format("Found safe zero-drift pair: %s / %s", pair.out, pair.back))
                 return pair
@@ -358,7 +364,7 @@ local function try_unstuck()
     -- handle (completely different menus/addresses than wild encounters).
     -- B is the safe cancel/decline button used everywhere else in this
     -- script for exactly this reason.
-    for i = 1, 10 do
+    for i = 1, 40 do
         press_button("B")
         if memory.readbyte(species_addr) ~= 0 then break end
     end
@@ -370,12 +376,12 @@ local function do_nudge_cycle()
     local madeRealProgress = false
 
     if homeX == nil then
-        homeX, homeY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        homeX, homeY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         vprint(string.format("Anchoring home tile at X=%d Y=%d", homeX, homeY))
     end
 
     if safe_pair == nil then
-        local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         if curX ~= homeX or curY ~= homeY then
             local reachedHome = walk_toward_home()
             if memory.readbyte(species_addr) ~= 0 then return end
@@ -400,13 +406,13 @@ local function do_nudge_cycle()
             madeRealProgress = (safe_pair ~= nil)
         end
     else
-        local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local startX, startY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         local movedOut = attempt_step(safe_pair.out)
         if memory.readbyte(species_addr) ~= 0 then return end
         local movedBack = attempt_step(safe_pair.back)
         if memory.readbyte(species_addr) ~= 0 then return end
 
-        local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local endX, endY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         local trulyReturned = (endX == startX and endY == startY)
         madeRealProgress = movedOut and movedBack and trulyReturned
 
@@ -420,7 +426,7 @@ local function do_nudge_cycle()
         cycles_since_print = cycles_since_print + 1
         if cycles_since_print >= 20 then
             cycles_since_print = 0
-            local x, y = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+            local x, y = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
             vprint(string.format("Still nudging (%s/%s) at X=%d Y=%d", safe_pair and safe_pair.out or "?", safe_pair and safe_pair.back or "?", x, y))
         end
     end
@@ -478,6 +484,7 @@ local have_battle_controls = false
 -- default (the first move in the list) - no move-submenu navigation
 -- needed, since "kill non-shiny" always wants the first attack.
 local FIGHT_CURSOR = {y = 1, x = 1}
+local PACK_CURSOR = {y = 2, x = 1}
 
 local function get_active_mon_level()
     local slotIndex = memory.readbyte(curPartyMonAddr)
@@ -489,6 +496,25 @@ local function get_active_mon_species()
     local slotIndex = memory.readbyte(curPartyMonAddr)
     if slotIndex > 5 then slotIndex = 5 end
     return memory.readbyte(party_base_addr + 1 + slotIndex)
+end
+
+-- Verified via wPartyMon1Moves in both pokecrystal.sym ($DCE1, party
+-- base +0x0A) and pokegold.sym ($DA2C, also +0x0A) - identical offset
+-- between games. Counts how many of the 4 move slots are non-zero. If
+-- fewer than 4, the Pokemon has a free slot and any newly-learned move
+-- will auto-fill it with NO prompt at all - no risk, safe to let A
+-- presses through without stopping for that specific level-up.
+local function get_active_mon_move_count()
+    local slotIndex = memory.readbyte(curPartyMonAddr)
+    if slotIndex > 5 then slotIndex = 5 end
+    local baseAddr = party_base_addr + 0x0A + slotIndex * 0x30
+    local count = 0
+    for i = 0, 3 do
+        if memory.readbyte(baseAddr + i) ~= 0 then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 -- Checks whether the species learns a move at ANY level in
@@ -522,6 +548,216 @@ end
 -- to whatever happened in between.
 local battleLevelBaseline = nil
 local battleLevelBaselineSpecies = nil
+local battleLevelBaselineMoveCount = nil
+
+-- ===== Auto-catch =====
+-- Scans the bag for the first ball type found, in BALL_ITEM_IDS
+-- preference order (Poke Ball preferred, per direct instruction).
+-- Returns the item ID found, or nil if no balls at all.
+local function find_ball_in_bag()
+    for _, ballId in ipairs(BALL_ITEM_IDS) do
+        for i = 0, 19 do
+            local itemId = memory.readbyte(wItemsAddr + i * 2)
+            if itemId == 0xFF then break end
+            if itemId == ballId then
+                return ballId
+            end
+        end
+    end
+    return nil
+end
+
+-- Navigates PACK -> scrolls to the given ball -> selects it (which
+-- throws it directly at a wild Pokemon, no "use on which Pokemon?"
+-- prompt the way a Potion would have). wCurItem reliably reflects the
+-- currently-highlighted item once the menu has settled (confirmed via
+-- direct observation), so this checks it before each Down press rather
+-- than blindly pressing a fixed number of times - self-correcting if a
+-- press is dropped or the bag layout isn't what was last scanned.
+local function navigate_to_pack_and_select_ball(ballId)
+    local nav_attempts = 0
+    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+        local cy = memory.readbyte(MENU_CURSOR_Y)
+        local cx = memory.readbyte(MENU_CURSOR_X)
+        if cy == PACK_CURSOR.y and cx == PACK_CURSOR.x then
+            press_button("A")
+            break
+        else
+            nav_attempts = nav_attempts + 1
+            if nav_attempts > 12 then
+                print("Catch-mode: navigation to PACK stuck after 12 attempts")
+                return false
+            end
+            local next_input = navigate_to_menu_option(PACK_CURSOR)
+            press_and_wait_for_cursor_change(next_input, 30)
+        end
+    end
+
+    -- Give the Pack menu a moment to actually open and settle - directly
+    -- observed a brief (1-4 frame) window of unrelated/noisy values in
+    -- this same memory region right as a menu transition happens, same
+    -- class of issue as the EXP-gain animation corruption found earlier.
+    for i = 1, 30 do
+        emu.frameadvance()
+        if memory.readbyte(species_addr) == 0 then return false end
+    end
+
+    local scrollAttempts = 0
+    while scrollAttempts < 20 and memory.readbyte(species_addr) ~= 0 do
+        local curItem = memory.readbyte(wCurItemAddr)
+        if curItem == ballId then
+            press_button("A")
+            return true
+        end
+        press_button("Down")
+        scrollAttempts = scrollAttempts + 1
+    end
+
+    print("Catch-mode: couldn't find the ball in the Pack menu after scrolling")
+    press_button("B")
+    return false
+end
+
+-- Simplified attack turn for weakening the enemy before catching -
+-- deliberately NOT do_kill_turn(), since that function's move-learn
+-- detection doesn't apply here (our own Pokemon can't level up from a
+-- hit that doesn't faint the enemy). Returns "fainted" if the attack
+-- accidentally faints the target (a real risk with an over-leveled
+-- attacker, worth surfacing rather than silently treating as success),
+-- "ok" otherwise.
+local function do_catch_attack_turn()
+    local nav_attempts = 0
+    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+        local cy = memory.readbyte(MENU_CURSOR_Y)
+        local cx = memory.readbyte(MENU_CURSOR_X)
+        if cy == FIGHT_CURSOR.y and cx == FIGHT_CURSOR.x then
+            press_button("A")
+            break
+        else
+            nav_attempts = nav_attempts + 1
+            if nav_attempts > 12 then
+                print("Catch-mode: attack navigation stuck after 12 attempts")
+                return "stuck"
+            end
+            local next_input = navigate_to_menu_option(FIGHT_CURSOR)
+            press_and_wait_for_cursor_change(next_input, 30)
+        end
+    end
+
+    if memory.readbyte(species_addr) == 0 then return "fainted" end
+
+    for i = 1, 15 do
+        emu.frameadvance()
+        if memory.readbyte(species_addr) == 0 then return "fainted" end
+    end
+    press_button("A")
+
+    have_battle_controls = false
+    local postAttackWait = 0
+    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
+        emu.frameadvance()
+        press_button("A")
+        postAttackWait = postAttackWait + 1
+        if postAttackWait > 600 then
+            print("Catch-mode: post-attack wait timed out")
+            return "stuck"
+        end
+    end
+
+    if memory.readbyte(species_addr) == 0 then return "fainted" end
+    return "ok"
+end
+
+local CATCH_HP_TARGET_PERCENT = 0.30
+
+local function do_catch_sequence()
+    print("Shiny found! Starting auto-catch sequence...")
+    send_discord_notification("Shiny found! Attempting to catch it automatically.")
+
+    local ballId = find_ball_in_bag()
+    if not ballId then
+        print("No balls in the bag - stopping so you can restock and catch it manually.")
+        send_discord_notification("Shiny found, but no balls in the bag! Stopped - restock and catch manually.")
+        return true
+    end
+
+    -- Weaken the enemy to a safe-but-catchable HP range first, since
+    -- Gen 2's catch formula weights heavily on current HP - throwing
+    -- balls at full HP wastes far more of them on average. Checks HP
+    -- after EVERY attack, not periodically, to minimize the window
+    -- where an over-leveled hit could overshoot straight to a faint.
+    while true do
+        local curHP = memory.read_u16_be(enemy_hp_addr)
+        local maxHP = memory.read_u16_be(enemy_max_hp_addr)
+        if maxHP == 0 then
+            print("Catch-mode: couldn't read enemy max HP - stopping so you can catch it manually.")
+            return true
+        end
+        if curHP <= maxHP * CATCH_HP_TARGET_PERCENT then
+            break
+        end
+        local result = do_catch_attack_turn()
+        if result == "fainted" then
+            print("The shiny fainted while weakening it for capture - it's gone. Stopping.")
+            send_discord_notification("A shiny fainted during the auto-catch attempt and got away. Sorry - you may want to double-check the catch HP threshold.")
+            return true
+        elseif result == "stuck" then
+            print("Catch-mode: got stuck while weakening the enemy - stopping so you can take over.")
+            send_discord_notification("Auto-catch got stuck while weakening the shiny for capture. Stopping so you can take over manually.")
+            return true
+        end
+    end
+
+    -- Throw balls until caught, or we run out.
+    local maxThrows = 20
+    local throws = 0
+    while throws < maxThrows do
+        ballId = find_ball_in_bag()
+        if not ballId then
+            print("Ran out of balls mid-catch - stopping so you can restock and finish manually.")
+            send_discord_notification("Ran out of balls while trying to catch a shiny! Stopped - restock and catch manually.")
+            return true
+        end
+
+        local navigated = navigate_to_pack_and_select_ball(ballId)
+        if not navigated then
+            print("Catch-mode: failed to navigate to the ball - stopping so you can take over.")
+            send_discord_notification("Auto-catch failed to navigate the Pack menu. Stopping so you can take over manually.")
+            return true
+        end
+
+        -- Same reasoning as do_kill_turn()'s post-attack wait: keep
+        -- pressing A through the throw animation/messages, bounded so a
+        -- stuck state doesn't hang forever.
+        local waitFrames = 0
+        while memory.readbyte(species_addr) ~= 0 and not have_battle_controls and waitFrames < 600 do
+            emu.frameadvance()
+            press_button("A")
+            waitFrames = waitFrames + 1
+        end
+
+        if memory.readbyte(species_addr) == 0 then
+            -- Battle ended - the catch succeeded. Press through the
+            -- nickname prompt (declining it) and any "sent to a Box"
+            -- message if the party was already full (automatic in
+            -- Gen 2, just needs a few more A presses to clear).
+            print("Caught! Declining nickname prompt and clearing any follow-up messages...")
+            for i = 1, 120 do
+                press_button("B")
+                emu.frameadvance()
+            end
+            send_discord_notification("Shiny caught successfully via auto-catch!")
+            return true
+        end
+
+        throws = throws + 1
+        print(string.format("Ball thrown (%d/%d) - still in battle, trying again.", throws, maxThrows))
+    end
+
+    print("Ran out of throw attempts (" .. maxThrows .. ") without catching it - stopping so you can take over.")
+    send_discord_notification("Auto-catch used " .. maxThrows .. " balls without success. Stopping so you can take over manually.")
+    return true
+end
 
 local function do_kill_turn()
     local nav_attempts = 0
@@ -582,6 +818,7 @@ local function do_kill_turn()
     if battleLevelBaseline == nil then
         battleLevelBaseline = get_active_mon_level()
         battleLevelBaselineSpecies = get_active_mon_species()
+        battleLevelBaselineMoveCount = get_active_mon_move_count()
     end
     local levelBeforeAttack = battleLevelBaseline
     local activeSpecies = battleLevelBaselineSpecies
@@ -605,8 +842,13 @@ local function do_kill_turn()
         -- every level, so this lets ordinary level-ups with no move
         -- pass through automatically.
         if learnMovePromptDetected then
-            print("Move-learn prompt detected - stopping immediately so you can decide (this Pokemon likely also just leveled up).")
-            return "stuck"
+            if battleLevelBaselineMoveCount ~= nil and battleLevelBaselineMoveCount < 4 then
+                vprint("Move-learn prompt detected, but a free move slot was available at battle start - auto-fills with no risk, continuing.")
+                learnMovePromptDetected = false
+            else
+                print("Move-learn prompt detected - stopping immediately so you can decide (this Pokemon likely also just leveled up).")
+                return "stuck"
+            end
         end
         local currentLevel = get_active_mon_level()
         -- Require the SAME level value to be confirmed across 3
@@ -621,8 +863,12 @@ local function do_kill_turn()
         end
         lastSeenLevel = currentLevel
         if confirmedHigherLevelFrames >= 3 and learns_move_in_range(activeSpecies, levelBeforeAttack, currentLevel) then
-            print(string.format("Level increase to %d - this species learns a move somewhere in that range, a learn-prompt is likely showing. Stopping so you can decide.", currentLevel))
-            return "stuck"
+            if battleLevelBaselineMoveCount ~= nil and battleLevelBaselineMoveCount < 4 then
+                vprint(string.format("Level increase to %d with a move-learn possible, but a free move slot was available at battle start - auto-fills with no risk, continuing.", currentLevel))
+            else
+                print(string.format("Level increase to %d - this species learns a move somewhere in that range, a learn-prompt is likely showing. Stopping so you can decide.", currentLevel))
+                return "stuck"
+            end
         end
         emu.frameadvance()
         press_button("A")
@@ -642,12 +888,15 @@ local overworld_loaded = false
 local overworld_settle_frames = 0
 local REQUIRED_SETTLE_FRAMES = 10 -- consecutive frames of species_addr==0 before we trust we're truly back
 
--- Top-level watchdog: tracks real elapsed frames since the player's tile
+-- Top-level watchdog: tracks real-world time since the player's tile
 -- position last actually changed, completely independent of which
--- internal branch/state we're currently in.
-local WATCHDOG_FRAMES = 1800
+-- internal branch/state we're currently in. Uses os.time() (real
+-- wall-clock time), not emu.framecount() (game frames) - a frame-count
+-- threshold fires inconsistently early when running at a speedup,
+-- since the same number of game frames passes in less real time.
+local WATCHDOG_SECONDS = 45
 local watchdogLastX, watchdogLastY
-local watchdogLastMoveFrame
+local watchdogLastMoveTime
 
 -- Separate battle watchdog: the overworld watchdog above can't apply
 -- during battle at all (position is SUPPOSED to stay fixed the whole
@@ -665,13 +914,13 @@ local battleWatchdogLastDiagnostic = nil
 local battleWatchdogTriggered = false
 
 local function watchdog_force_unstuck()
-    print(string.format("WATCHDOG: no position change for %d+ frames (~30s) regardless of internal state - forcing recovery", WATCHDOG_FRAMES))
+    print(string.format("WATCHDOG: no position change for %d+ seconds regardless of internal state - forcing recovery", WATCHDOG_SECONDS))
     attempt_unstuck_recovery()
     safe_pair = nil
     overworld_settle_frames = 0
     overworld_loaded = false
     realEncounterConfirmed = false
-    watchdogLastMoveFrame = emu.framecount()
+    watchdogLastMoveTime = os.time()
 end
 
 -- Hooks get REPLACED by name every time RegisterROMHook runs (confirmed
@@ -777,27 +1026,53 @@ function M.init(sharedForm, yOffset, existingHud)
     elseif version == 0x55 or version == 0x58 then
         if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
             print("EUR Gold/Silver detected")
-            enemy_addr = 0xda22
+            -- Verified against pokegold.sym (symbols branch): enemy_addr
+            -- is wEnemyMonDVs ($D0F5), NOT $DA22 (which is actually
+            -- wPartyCount - a confirmed bug in the previous, unverified
+            -- value). EnemyWildmonInitialized corrected to the
+            -- .skip_unown sub-label ($7400), matching the same reasoning
+            -- used to pick that specific sub-label for Crystal.
+            enemy_addr = 0xd0f5
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73c5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
+            -- Verified against pokegold.sym: LearnLevelMoves.learn is at
+            -- $64C1 (bank $10), only 4 bytes off from Crystal's $64C5 -
+            -- makes the hook the PRIMARY move-learn detection instead of
+            -- relying solely on the level-check fallback, which is
+            -- inherently imprecise (data-table based, plus a deliberate
+            -- +/-1 safety margin that can false-positive on a level
+            -- where nothing is actually being offered yet).
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c1)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x45 then
             print("USA Gold/Silver detected")
-            enemy_addr = 0xda22
+            enemy_addr = 0xd0f5
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c1)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4A then
             print("JPN Gold/Silver detected")
+            -- STILL UNVERIFIED: enemy_addr here is $D9E8, the exact same
+            -- value as party_base_addr for this region below - the same
+            -- bug pattern just confirmed and fixed for EU/US, but I
+            -- don't have JP-specific symbol data to correct it to the
+            -- right value. This branch is known-broken until verified.
             enemy_addr = 0xd9e8
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
+            -- Also unverified for this region specifically, though the
+            -- hook address itself (bank/offset) is a ROM code location
+            -- that should be region-independent, same as the other hooks.
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c1)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4B then
             print("KOR Gold/Silver detected")
+            -- STILL UNVERIFIED - same caveat as the JP branch above.
             enemy_addr = 0xdb1f
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
+            LearnMoveAddr = Mem.BankAddressToLinear(0x10, 0x64c1)
             Mem.SetRomBankAddress("Gold")
         end
     else
@@ -812,6 +1087,20 @@ function M.init(sharedForm, yOffset, existingHud)
     -- base as enemy_addr (structurally consistent with the standard
     -- Species+Item+Moves+OT_ID+DVs = 10 bytes before HP layout).
     enemy_hp_addr = enemy_addr + 0x0A
+    -- Verified via pokecrystal.sym/pokegold.sym: wEnemyMonMaxHP is
+    -- +0x0C from the same base as enemy_addr in both games (right after
+    -- the 2-byte HP value itself) - needed to compute HP% for deciding
+    -- when the target is weak enough to start throwing balls.
+    enemy_max_hp_addr = enemy_addr + 0x0C
+    -- Gold/Silver note: item_addr (-0x05) and enemy_hp_addr (+0x0A) are
+    -- directly confirmed against pokegold.sym's named wEnemyMonItem and
+    -- wEnemyMonHP. species_addr (+0x22) and dv_flag_addr (+0x21) are
+    -- NOT directly confirmed for Gold - they're extrapolated from the
+    -- same offset pattern that works for Crystal, on the basis that
+    -- InitEnemyWildmon.skip_unown is structurally very similar between
+    -- the two games (nearly identical bank/offset for the hook itself).
+    -- Reasonable, but worth specifically sanity-checking species names
+    -- and DV-read timing during Gold testing.
 
     -- For the move-learn detection fix: a move can only be learned on
     -- a level-up, so tracking the active Pokemon's level directly is
@@ -826,7 +1115,61 @@ function M.init(sharedForm, yOffset, existingHud)
     -- wCurBattleMon specifically to determine "which party member's
     -- data to display during battle" - exactly our use case. The
     -- wrong variable was very likely why level reads were unreliable.
-    curPartyMonAddr = 0xd0d4
+    -- wCurBattleMon determines "which party member's data to display
+    -- during battle" (confirmed via Crystal's DrawPlayerHUD routine) -
+    -- but it's at a DIFFERENT address in Gold/Silver ($CFC6, bank 00)
+    -- than in Crystal ($D0D4), confirmed via pokegold.sym. Must be
+    -- version-specific, not hardcoded to one game's value.
+    -- Same critical fix for the menu cursor addresses: confirmed via
+    -- direct symbol lookup that wMenuCursorY/X live at completely
+    -- different addresses between Crystal ($CFA9/$CFAA) and Gold/Silver
+    -- ($CEE0/$CEE1) - using the wrong one meant the bot was reading
+    -- unrelated memory during battle, so cursor-position checks never
+    -- matched anything real and navigation always timed out.
+    -- Confirmed via direct symbol lookup: wPlayerWalking lives at a
+    -- different address in Gold/Silver ($D204) than Crystal ($D4DD) -
+    -- using the wrong one meant attempt_step()'s wait loops never saw
+    -- the flag change correctly, so every step always hit its full
+    -- timeout instead of completing as soon as real movement finished
+    -- (explains "3-4x slower overworld movement").
+    -- Confirmed via direct symbol lookup: wPlayerWalking lives at a
+    -- different address in Gold/Silver ($D204) than Crystal ($D4DD) -
+    -- using the wrong one meant attempt_step()'s wait loops never saw
+    -- the flag change correctly, so every step always hit its full
+    -- timeout instead of completing as soon as real movement finished
+    -- (explains "3-4x slower overworld movement"). Same for
+    -- wXCoord/wYCoord: Crystal $DCB8/$DCB7, Gold/Silver $DA03/$DA02 -
+    -- previously hardcoded throughout the nudge-cycle and overworld
+    -- watchdog position-tracking, meaning the watchdog specifically
+    -- was reading unrelated memory on Gold even after basic movement
+    -- itself started working via the flag-address fix alone.
+    if version == 0x55 or version == 0x58 then
+        curPartyMonAddr = 0xcfc6
+        MENU_CURSOR_Y = 0xCEE0
+        MENU_CURSOR_X = 0xCEE1
+        MOVEMENT_FLAG_ADDR = 0xD204
+        FIRST_MOVE_PP_ADDR = 0xCB14
+        OWN_HP_ADDR = 0xCB1C
+        OWN_MAX_HP_ADDR = 0xCB1E
+        PLAYER_X_ADDR = 0xDA03
+        PLAYER_Y_ADDR = 0xDA02
+        wCurItemAddr = 0xD002
+        wItemsAddr = 0xD5B8
+        wNumItemsAddr = 0xD5B7
+    else
+        curPartyMonAddr = 0xd0d4
+        MENU_CURSOR_Y = 0xCFA9
+        MENU_CURSOR_X = 0xCFAA
+        MOVEMENT_FLAG_ADDR = 0xD4DD
+        FIRST_MOVE_PP_ADDR = 0xC634
+        OWN_HP_ADDR = 0xC63C
+        OWN_MAX_HP_ADDR = 0xC63E
+        PLAYER_X_ADDR = 0xDCB8
+        PLAYER_Y_ADDR = 0xDCB7
+        wCurItemAddr = 0xD106
+        wItemsAddr = 0xD893
+        wNumItemsAddr = 0xD892
+    end
     if version == 0x54 then
         if region == 0x4A then party_base_addr = 0xDC9D
         else party_base_addr = 0xDCD7 end
@@ -836,8 +1179,8 @@ function M.init(sharedForm, yOffset, existingHud)
         else party_base_addr = 0xDA22 end
     end
 
-    watchdogLastX, watchdogLastY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
-    watchdogLastMoveFrame = emu.framecount()
+    watchdogLastX, watchdogLastY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
+    watchdogLastMoveTime = os.time()
 
     register_hooks()
 
@@ -940,14 +1283,14 @@ function M.step()
     -- keep refreshing the clock so it starts fresh once we're actually
     -- back in the overworld.
     if rawSpecies ~= 0 then
-        watchdogLastX, watchdogLastY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
-        watchdogLastMoveFrame = emu.framecount()
+        watchdogLastX, watchdogLastY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
+        watchdogLastMoveTime = os.time()
     else
-        local watchdogX, watchdogY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local watchdogX, watchdogY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         if watchdogX ~= watchdogLastX or watchdogY ~= watchdogLastY then
             watchdogLastX, watchdogLastY = watchdogX, watchdogY
-            watchdogLastMoveFrame = emu.framecount()
-        elseif emu.framecount() - watchdogLastMoveFrame >= WATCHDOG_FRAMES then
+            watchdogLastMoveTime = os.time()
+        elseif os.time() - watchdogLastMoveTime >= WATCHDOG_SECONDS then
             watchdog_force_unstuck()
         end
     end
@@ -971,6 +1314,7 @@ function M.step()
                 battleWatchdogLastDiagnostic = nil
                 battleLevelBaseline = nil
                 battleLevelBaselineSpecies = nil
+                battleLevelBaselineMoveCount = nil
                 learnMovePromptDetected = false
             end
             overworld_loaded = true
@@ -1005,6 +1349,7 @@ function M.step()
             -- caused) had already happened.
             battleLevelBaseline = get_active_mon_level()
             battleLevelBaselineSpecies = get_active_mon_species()
+            battleLevelBaselineMoveCount = get_active_mon_move_count()
         elseif not battleWatchdogTriggered and os.time() - battleWatchdogStartTime >= BATTLE_WATCHDOG_SECONDS then
             battleWatchdogTriggered = true
             local enemyHP = memory.read_u16_be(enemy_hp_addr)
@@ -1047,9 +1392,17 @@ function M.step()
 
         realEncounterConfirmed = false
 
+        if Gui.auto_catch_test_mode(hud) then
+            return do_catch_sequence()
+        end
+
         if shinyvalue == 1 then
-            print("Shiny found!!")
-            return true
+            if Gui.auto_catch_enabled(hud) then
+                return do_catch_sequence()
+            else
+                print("Shiny found!!")
+                return true
+            end
         end
 
         if stopRequested then

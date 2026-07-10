@@ -165,19 +165,28 @@ function M.init(sharedForm, yOffset, existingHud)
         end
     elseif version == 0x55 or version == 0x58 then
         if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 or region == 0x45 then
-            enemy_addr = 0xda22
+            -- Verified against pokegold.sym: enemy_addr is wEnemyMonDVs
+            -- ($D0F5), NOT $DA22 (which is actually wPartyCount - the
+            -- same bug already found and fixed in wild.lua/fishing.lua/
+            -- headbutt.lua, but missed here since static.lua has its own
+            -- separate copy of this setup). EnemyWildmonInitialized
+            -- corrected to the .skip_unown sub-label ($7400).
+            enemy_addr = 0xd0f5
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73c5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4A then
+            -- STILL UNVERIFIED - same enemy_addr=party_base_addr bug
+            -- pattern, no JP-specific symbol data available.
             enemy_addr = 0xd9e8
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4B then
+            -- STILL UNVERIFIED - same caveat as the JP branch above.
             enemy_addr = 0xdb1f
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         else
             print("No valid ROM detected")

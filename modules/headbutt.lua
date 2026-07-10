@@ -124,14 +124,11 @@ local sessionEncounterCount = 0
 local highestSpeSpc = 0
 local highestAtkDef = 0
 
-local MENU_CURSOR_Y = 0xCFA9
-local MENU_CURSOR_X = 0xCFAA
+local MENU_CURSOR_Y, MENU_CURSOR_X
 local RUN_CURSOR = {y = 2, x = 2}
-local FIRST_MOVE_PP_ADDR = 0xC634
--- Verified via pokecrystal.sym symbol file: wBattleMonHP/wBattleMonMaxHP,
--- same fixed (non-bank-switched) region as FIRST_MOVE_PP_ADDR above.
-local OWN_HP_ADDR = 0xC63C
-local OWN_MAX_HP_ADDR = 0xC63E
+local FIRST_MOVE_PP_ADDR
+local OWN_HP_ADDR
+local OWN_MAX_HP_ADDR
 -- Flee instead of attacking if HP drops below this fraction of max -
 -- a safety margin above the game's own "red bar" threshold, so there's
 -- room to actually flee before a possible next hit could faint us.
@@ -339,6 +336,25 @@ function M.init(sharedForm, yOffset, existingHud)
     hud = existingHud
     Gui.reconfigure(hud, {"chkTrueRandomness"}) -- headbutt uses every encounter-related field; True Randomness only applies to soft-reset modules
 
+    -- Confirmed via direct symbol lookup: wMenuCursorY/X live at
+    -- completely different addresses between Crystal ($CFA9/$CFAA) and
+    -- Gold/Silver ($CEE0/$CEE1) - using the wrong one meant the bot was
+    -- reading unrelated memory during battle, so cursor-position checks
+    -- never matched anything real and navigation always timed out.
+    if version == 0x55 or version == 0x58 then
+        MENU_CURSOR_Y = 0xCEE0
+        MENU_CURSOR_X = 0xCEE1
+        FIRST_MOVE_PP_ADDR = 0xCB14
+        OWN_HP_ADDR = 0xCB1C
+        OWN_MAX_HP_ADDR = 0xCB1E
+    else
+        MENU_CURSOR_Y = 0xCFA9
+        MENU_CURSOR_X = 0xCFAA
+        FIRST_MOVE_PP_ADDR = 0xC634
+        OWN_HP_ADDR = 0xC63C
+        OWN_MAX_HP_ADDR = 0xC63E
+    end
+
     if version == 0x54 then
         if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
             enemy_addr = 0xd20c
@@ -358,24 +374,32 @@ function M.init(sharedForm, yOffset, existingHud)
         end
     elseif version == 0x55 or version == 0x58 then
         if region == 0x44 or region == 0x46 or region == 0x49 or region == 0x53 then
-            enemy_addr = 0xda22
+            -- Verified against pokegold.sym: enemy_addr is wEnemyMonDVs
+            -- ($D0F5), NOT $DA22 (which is actually wPartyCount).
+            -- EnemyWildmonInitialized corrected to the .skip_unown
+            -- sub-label ($7400), same reasoning as Crystal's hook.
+            enemy_addr = 0xd0f5
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73c5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x45 then
-            enemy_addr = 0xda22
+            enemy_addr = 0xd0f5
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4A then
+            -- STILL UNVERIFIED - same enemy_addr=party_base_addr bug
+            -- pattern just confirmed and fixed for EU/US, but no
+            -- JP-specific symbol data available to correct it.
             enemy_addr = 0xd9e8
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         elseif region == 0x4B then
+            -- STILL UNVERIFIED - same caveat as the JP branch above.
             enemy_addr = 0xdb1f
             LoadBattleMenuAddr = Mem.BankAddressToLinear(0x9, 0x4E62)
-            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x73C5)
+            EnemyWildmonInitialized = Mem.BankAddressToLinear(0xF, 0x7400)
             Mem.SetRomBankAddress("Gold")
         end
     else

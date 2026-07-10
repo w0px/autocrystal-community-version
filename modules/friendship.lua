@@ -152,11 +152,12 @@ end
 
 -- ===== Movement (verbatim from egg.lua/wild.lua's proven drift-proof
 -- system) =====
-local MOVEMENT_FLAG_ADDR = 0xD4DD
+local MOVEMENT_FLAG_ADDR
+local PLAYER_X_ADDR, PLAYER_Y_ADDR
 local MOVEMENT_IDLE_VALUE = 0xFF
 
 local function attempt_step(direction)
-    local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local startX, startY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
 
     for i = 1, 4 do
         joypad.set({[direction] = true})
@@ -178,7 +179,7 @@ local function attempt_step(direction)
         if memory.readbyte(enemy_species_addr) ~= 0 then return true end
     end
 
-    local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local endX, endY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     -- A single step should only ever move by 1 tile. A larger jump
     -- indicates this memory region got corrupted/repurposed for
     -- something else (same class of corruption seen in the happiness
@@ -196,7 +197,7 @@ local safe_pair = nil
 local homeX, homeY = nil, nil
 
 local function walk_toward_home()
-    local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     if curX == homeX and curY == homeY then return true end
 
     if curX < homeX then
@@ -210,12 +211,12 @@ local function walk_toward_home()
     end
 
     if memory.readbyte(enemy_species_addr) ~= 0 then return false end
-    curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     return (curX == homeX and curY == homeY)
 end
 
 local function find_safe_pair(verbose)
-    local anchorX, anchorY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+    local anchorX, anchorY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
     local candidates = {
         {out = "Right", back = "Left"},
         {out = "Left",  back = "Right"},
@@ -246,7 +247,7 @@ local function find_safe_pair(verbose)
                 if memory.readbyte(enemy_species_addr) ~= 0 then return nil end
             end
 
-            local nowX, nowY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+            local nowX, nowY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
             if movedBack and nowX == anchorX and nowY == anchorY then
                 vprint(string.format("Found safe zero-drift pair: %s / %s", pair.out, pair.back))
                 return pair
@@ -265,12 +266,12 @@ local function do_nudge_cycle()
     local madeRealProgress = false
 
     if homeX == nil then
-        homeX, homeY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        homeX, homeY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         vprint(string.format("Anchoring home tile at X=%d Y=%d", homeX, homeY))
     end
 
     if safe_pair == nil then
-        local curX, curY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local curX, curY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         if curX ~= homeX or curY ~= homeY then
             local reachedHome = walk_toward_home()
             if memory.readbyte(enemy_species_addr) ~= 0 then return false end
@@ -285,7 +286,7 @@ local function do_nudge_cycle()
             madeRealProgress = (safe_pair ~= nil)
         end
     else
-        local startX, startY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local startX, startY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         local movedOut = attempt_step(safe_pair.out)
         if memory.readbyte(enemy_species_addr) ~= 0 then return false end
         if not movedOut then
@@ -303,7 +304,7 @@ local function do_nudge_cycle()
             if memory.readbyte(enemy_species_addr) ~= 0 then return false end
         end
 
-        local endX, endY = memory.readbyte(0xdcb8), memory.readbyte(0xdcb7)
+        local endX, endY = memory.readbyte(PLAYER_X_ADDR), memory.readbyte(PLAYER_Y_ADDR)
         local trulyReturned = (endX == startX and endY == startY)
         madeRealProgress = movedOut and movedBack and trulyReturned
 
@@ -381,6 +382,23 @@ function M.init(sharedForm, yOffset, existingHud)
     local version = memory.readbyte(0x141)
     local region = memory.readbyte(0x142)
 
+    -- Confirmed via direct symbol lookup: wPlayerWalking lives at a
+    -- different address in Gold/Silver ($D204) than Crystal ($D4DD).
+    -- Same for wXCoord/wYCoord: Crystal $DCB8/$DCB7, Gold/Silver
+    -- $DA03/$DA02 - completely different, and previously hardcoded
+    -- throughout this file's movement logic, which explains why
+    -- friendship's walking never worked on Gold even after the
+    -- movement-flag fix alone.
+    if version == 0x55 or version == 0x58 then
+        MOVEMENT_FLAG_ADDR = 0xD204
+        PLAYER_X_ADDR = 0xDA03
+        PLAYER_Y_ADDR = 0xDA02
+    else
+        MOVEMENT_FLAG_ADDR = 0xD4DD
+        PLAYER_X_ADDR = 0xDCB8
+        PLAYER_Y_ADDR = 0xDCB7
+    end
+
     if version == 0x54 then
         if region == 0x4A then
             enemy_species_addr = 0xd23d + 0x22
@@ -391,13 +409,22 @@ function M.init(sharedForm, yOffset, existingHud)
         end
     elseif version == 0x55 or version == 0x58 then
         if region == 0x4A then
+            -- STILL UNVERIFIED - same enemy_addr=party_base_addr bug
+            -- pattern, no JP-specific symbol data available.
             enemy_species_addr = 0xd9e8 + 0x22
             party_base_addr = 0xD9E8
         elseif region == 0x4B then
+            -- STILL UNVERIFIED - same caveat as the JP branch above.
             enemy_species_addr = 0xdb1f + 0x22
             party_base_addr = 0xDB1F
         else
-            enemy_species_addr = 0xda22 + 0x22
+            -- Verified against pokegold.sym: enemy_species_addr should
+            -- be based on wEnemyMonDVs ($D0F5), NOT $DA22 (which is
+            -- actually wPartyCount) - the same bug already found and
+            -- fixed in wild.lua/fishing.lua/headbutt.lua/static.lua,
+            -- but missed here since friendship.lua has its own third
+            -- separate copy of this setup.
+            enemy_species_addr = 0xd0f5 + 0x22
             party_base_addr = 0xDA22
         end
     else

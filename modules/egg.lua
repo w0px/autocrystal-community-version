@@ -286,9 +286,13 @@ function M.init(sharedForm, yOffset, existingHud)
         if region == 0x4A then enemy_species_addr = 0xd23d + 0x22
         else enemy_species_addr = 0xd20c + 0x22 end
     else
+        -- Verified against pokegold.sym for EU/US: enemy_species_addr
+        -- should be based on wEnemyMonDVs ($D0F5), NOT $DA22 (which is
+        -- actually wPartyCount) - same bug already found and fixed
+        -- elsewhere. JP/KR still unverified, no symbol data available.
         if region == 0x4A then enemy_species_addr = 0xd9e8 + 0x22
         elseif region == 0x4B then enemy_species_addr = 0xdb1f + 0x22
-        else enemy_species_addr = 0xda22 + 0x22 end
+        else enemy_species_addr = 0xd0f5 + 0x22 end
     end
 
     math.randomseed(os.time())
