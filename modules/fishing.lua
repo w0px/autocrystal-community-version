@@ -89,7 +89,7 @@ local battleWatchdogTriggered = false
 
 local function attempt_unstuck_recovery()
     print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
-    for cycle = 1, 20 do
+    for cycle = 1, 50 do
         for i = 1, 20 do
             joypad.set({A = true})
             emu.frameadvance()

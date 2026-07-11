@@ -95,7 +95,7 @@ end
 
 local function attempt_unstuck_recovery()
     print("Attempting automatic recovery - alternating A/B presses for a few seconds...")
-    for cycle = 1, 20 do
+    for cycle = 1, 50 do
         for i = 1, 20 do
             joypad.set({A = true})
             emu.frameadvance()
@@ -175,11 +175,6 @@ local highestAtkDef = 0
 --   FIGHT=(1,1)  PKMN=(1,2)
 --   PACK =(2,1)  RUN =(2,2)
 local MENU_CURSOR_Y, MENU_CURSOR_X
-local wCurItemAddr, wItemsAddr, wNumItemsAddr
--- Preference order when scanning the bag for something to throw -
--- Poke Ball specifically preferred (per direct instruction), falling
--- back to other ball types only if no Poke Balls are left.
-local BALL_ITEM_IDS = {5, 4, 2, 1} -- Poke, Great, Ultra, Master
 local RUN_CURSOR = {y = 2, x = 2}
 
 -- $C634: confirmed via WRAM diffing (before/after using the first move)
@@ -196,7 +191,7 @@ local OWN_MAX_HP_ADDR
 -- room to actually flee before a possible next hit could faint us.
 local LOW_HP_FLEE_THRESHOLD = 0.25
 
-local dv_flag_addr, species_addr, item_addr, enemy_hp_addr, enemy_max_hp_addr
+local dv_flag_addr, species_addr, item_addr, enemy_hp_addr
 
 local function shiny(atkdef, spespc)
     -- IMPORTANT: reset every call, not just set on a hit - otherwise
@@ -347,7 +342,7 @@ end
 local cycles_since_print = 0
 local failed_pair_attempts = 0
 local consecutive_movement_failures = 0
-local UNSTUCK_THRESHOLD = 100
+local UNSTUCK_THRESHOLD = 30
 
 -- If a phone call, sign, or any other unexpected text box pops up in the
 -- overworld, our button presses stop producing real movement even though
@@ -364,7 +359,7 @@ local function try_unstuck()
     -- handle (completely different menus/addresses than wild encounters).
     -- B is the safe cancel/decline button used everywhere else in this
     -- script for exactly this reason.
-    for i = 1, 40 do
+    for i = 1, 80 do
         press_button("B")
         if memory.readbyte(species_addr) ~= 0 then break end
     end
@@ -484,7 +479,6 @@ local have_battle_controls = false
 -- default (the first move in the list) - no move-submenu navigation
 -- needed, since "kill non-shiny" always wants the first attack.
 local FIGHT_CURSOR = {y = 1, x = 1}
-local PACK_CURSOR = {y = 2, x = 1}
 
 local function get_active_mon_level()
     local slotIndex = memory.readbyte(curPartyMonAddr)
@@ -549,215 +543,6 @@ end
 local battleLevelBaseline = nil
 local battleLevelBaselineSpecies = nil
 local battleLevelBaselineMoveCount = nil
-
--- ===== Auto-catch =====
--- Scans the bag for the first ball type found, in BALL_ITEM_IDS
--- preference order (Poke Ball preferred, per direct instruction).
--- Returns the item ID found, or nil if no balls at all.
-local function find_ball_in_bag()
-    for _, ballId in ipairs(BALL_ITEM_IDS) do
-        for i = 0, 19 do
-            local itemId = memory.readbyte(wItemsAddr + i * 2)
-            if itemId == 0xFF then break end
-            if itemId == ballId then
-                return ballId
-            end
-        end
-    end
-    return nil
-end
-
--- Navigates PACK -> scrolls to the given ball -> selects it (which
--- throws it directly at a wild Pokemon, no "use on which Pokemon?"
--- prompt the way a Potion would have). wCurItem reliably reflects the
--- currently-highlighted item once the menu has settled (confirmed via
--- direct observation), so this checks it before each Down press rather
--- than blindly pressing a fixed number of times - self-correcting if a
--- press is dropped or the bag layout isn't what was last scanned.
-local function navigate_to_pack_and_select_ball(ballId)
-    local nav_attempts = 0
-    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
-        local cy = memory.readbyte(MENU_CURSOR_Y)
-        local cx = memory.readbyte(MENU_CURSOR_X)
-        if cy == PACK_CURSOR.y and cx == PACK_CURSOR.x then
-            press_button("A")
-            break
-        else
-            nav_attempts = nav_attempts + 1
-            if nav_attempts > 12 then
-                print("Catch-mode: navigation to PACK stuck after 12 attempts")
-                return false
-            end
-            local next_input = navigate_to_menu_option(PACK_CURSOR)
-            press_and_wait_for_cursor_change(next_input, 30)
-        end
-    end
-
-    -- Give the Pack menu a moment to actually open and settle - directly
-    -- observed a brief (1-4 frame) window of unrelated/noisy values in
-    -- this same memory region right as a menu transition happens, same
-    -- class of issue as the EXP-gain animation corruption found earlier.
-    for i = 1, 30 do
-        emu.frameadvance()
-        if memory.readbyte(species_addr) == 0 then return false end
-    end
-
-    local scrollAttempts = 0
-    while scrollAttempts < 20 and memory.readbyte(species_addr) ~= 0 do
-        local curItem = memory.readbyte(wCurItemAddr)
-        if curItem == ballId then
-            press_button("A")
-            return true
-        end
-        press_button("Down")
-        scrollAttempts = scrollAttempts + 1
-    end
-
-    print("Catch-mode: couldn't find the ball in the Pack menu after scrolling")
-    press_button("B")
-    return false
-end
-
--- Simplified attack turn for weakening the enemy before catching -
--- deliberately NOT do_kill_turn(), since that function's move-learn
--- detection doesn't apply here (our own Pokemon can't level up from a
--- hit that doesn't faint the enemy). Returns "fainted" if the attack
--- accidentally faints the target (a real risk with an over-leveled
--- attacker, worth surfacing rather than silently treating as success),
--- "ok" otherwise.
-local function do_catch_attack_turn()
-    local nav_attempts = 0
-    while have_battle_controls and memory.readbyte(species_addr) ~= 0 do
-        local cy = memory.readbyte(MENU_CURSOR_Y)
-        local cx = memory.readbyte(MENU_CURSOR_X)
-        if cy == FIGHT_CURSOR.y and cx == FIGHT_CURSOR.x then
-            press_button("A")
-            break
-        else
-            nav_attempts = nav_attempts + 1
-            if nav_attempts > 12 then
-                print("Catch-mode: attack navigation stuck after 12 attempts")
-                return "stuck"
-            end
-            local next_input = navigate_to_menu_option(FIGHT_CURSOR)
-            press_and_wait_for_cursor_change(next_input, 30)
-        end
-    end
-
-    if memory.readbyte(species_addr) == 0 then return "fainted" end
-
-    for i = 1, 15 do
-        emu.frameadvance()
-        if memory.readbyte(species_addr) == 0 then return "fainted" end
-    end
-    press_button("A")
-
-    have_battle_controls = false
-    local postAttackWait = 0
-    while not have_battle_controls and memory.readbyte(species_addr) ~= 0 do
-        emu.frameadvance()
-        press_button("A")
-        postAttackWait = postAttackWait + 1
-        if postAttackWait > 600 then
-            print("Catch-mode: post-attack wait timed out")
-            return "stuck"
-        end
-    end
-
-    if memory.readbyte(species_addr) == 0 then return "fainted" end
-    return "ok"
-end
-
-local CATCH_HP_TARGET_PERCENT = 0.30
-
-local function do_catch_sequence()
-    print("Shiny found! Starting auto-catch sequence...")
-    send_discord_notification("Shiny found! Attempting to catch it automatically.")
-
-    local ballId = find_ball_in_bag()
-    if not ballId then
-        print("No balls in the bag - stopping so you can restock and catch it manually.")
-        send_discord_notification("Shiny found, but no balls in the bag! Stopped - restock and catch manually.")
-        return true
-    end
-
-    -- Weaken the enemy to a safe-but-catchable HP range first, since
-    -- Gen 2's catch formula weights heavily on current HP - throwing
-    -- balls at full HP wastes far more of them on average. Checks HP
-    -- after EVERY attack, not periodically, to minimize the window
-    -- where an over-leveled hit could overshoot straight to a faint.
-    while true do
-        local curHP = memory.read_u16_be(enemy_hp_addr)
-        local maxHP = memory.read_u16_be(enemy_max_hp_addr)
-        if maxHP == 0 then
-            print("Catch-mode: couldn't read enemy max HP - stopping so you can catch it manually.")
-            return true
-        end
-        if curHP <= maxHP * CATCH_HP_TARGET_PERCENT then
-            break
-        end
-        local result = do_catch_attack_turn()
-        if result == "fainted" then
-            print("The shiny fainted while weakening it for capture - it's gone. Stopping.")
-            send_discord_notification("A shiny fainted during the auto-catch attempt and got away. Sorry - you may want to double-check the catch HP threshold.")
-            return true
-        elseif result == "stuck" then
-            print("Catch-mode: got stuck while weakening the enemy - stopping so you can take over.")
-            send_discord_notification("Auto-catch got stuck while weakening the shiny for capture. Stopping so you can take over manually.")
-            return true
-        end
-    end
-
-    -- Throw balls until caught, or we run out.
-    local maxThrows = 20
-    local throws = 0
-    while throws < maxThrows do
-        ballId = find_ball_in_bag()
-        if not ballId then
-            print("Ran out of balls mid-catch - stopping so you can restock and finish manually.")
-            send_discord_notification("Ran out of balls while trying to catch a shiny! Stopped - restock and catch manually.")
-            return true
-        end
-
-        local navigated = navigate_to_pack_and_select_ball(ballId)
-        if not navigated then
-            print("Catch-mode: failed to navigate to the ball - stopping so you can take over.")
-            send_discord_notification("Auto-catch failed to navigate the Pack menu. Stopping so you can take over manually.")
-            return true
-        end
-
-        -- Same reasoning as do_kill_turn()'s post-attack wait: keep
-        -- pressing A through the throw animation/messages, bounded so a
-        -- stuck state doesn't hang forever.
-        local waitFrames = 0
-        while memory.readbyte(species_addr) ~= 0 and not have_battle_controls and waitFrames < 600 do
-            emu.frameadvance()
-            press_button("A")
-            waitFrames = waitFrames + 1
-        end
-
-        if memory.readbyte(species_addr) == 0 then
-            -- Battle ended - the catch succeeded. Press through the
-            -- nickname prompt (declining it) and any "sent to a Box"
-            -- message if the party was already full (automatic in
-            -- Gen 2, just needs a few more A presses to clear).
-            print("Caught! Declining nickname prompt and clearing any follow-up messages...")
-            for i = 1, 120 do
-                press_button("B")
-                emu.frameadvance()
-            end
-            send_discord_notification("Shiny caught successfully via auto-catch!")
-            return true
-        end
-
-        throws = throws + 1
-        print(string.format("Ball thrown (%d/%d) - still in battle, trying again.", throws, maxThrows))
-    end
-
-    print("Ran out of throw attempts (" .. maxThrows .. ") without catching it - stopping so you can take over.")
-    send_discord_notification("Auto-catch used " .. maxThrows .. " balls without success. Stopping so you can take over manually.")
-    return true
-end
 
 local function do_kill_turn()
     local nav_attempts = 0
@@ -894,7 +679,7 @@ local REQUIRED_SETTLE_FRAMES = 10 -- consecutive frames of species_addr==0 befor
 -- wall-clock time), not emu.framecount() (game frames) - a frame-count
 -- threshold fires inconsistently early when running at a speedup,
 -- since the same number of game frames passes in less real time.
-local WATCHDOG_SECONDS = 45
+local WATCHDOG_SECONDS = 30
 local watchdogLastX, watchdogLastY
 local watchdogLastMoveTime
 
@@ -1087,11 +872,6 @@ function M.init(sharedForm, yOffset, existingHud)
     -- base as enemy_addr (structurally consistent with the standard
     -- Species+Item+Moves+OT_ID+DVs = 10 bytes before HP layout).
     enemy_hp_addr = enemy_addr + 0x0A
-    -- Verified via pokecrystal.sym/pokegold.sym: wEnemyMonMaxHP is
-    -- +0x0C from the same base as enemy_addr in both games (right after
-    -- the 2-byte HP value itself) - needed to compute HP% for deciding
-    -- when the target is weak enough to start throwing balls.
-    enemy_max_hp_addr = enemy_addr + 0x0C
     -- Gold/Silver note: item_addr (-0x05) and enemy_hp_addr (+0x0A) are
     -- directly confirmed against pokegold.sym's named wEnemyMonItem and
     -- wEnemyMonHP. species_addr (+0x22) and dv_flag_addr (+0x21) are
@@ -1153,9 +933,6 @@ function M.init(sharedForm, yOffset, existingHud)
         OWN_MAX_HP_ADDR = 0xCB1E
         PLAYER_X_ADDR = 0xDA03
         PLAYER_Y_ADDR = 0xDA02
-        wCurItemAddr = 0xD002
-        wItemsAddr = 0xD5B8
-        wNumItemsAddr = 0xD5B7
     else
         curPartyMonAddr = 0xd0d4
         MENU_CURSOR_Y = 0xCFA9
@@ -1166,9 +943,6 @@ function M.init(sharedForm, yOffset, existingHud)
         OWN_MAX_HP_ADDR = 0xC63E
         PLAYER_X_ADDR = 0xDCB8
         PLAYER_Y_ADDR = 0xDCB7
-        wCurItemAddr = 0xD106
-        wItemsAddr = 0xD893
-        wNumItemsAddr = 0xD892
     end
     if version == 0x54 then
         if region == 0x4A then party_base_addr = 0xDC9D
@@ -1392,17 +1166,9 @@ function M.step()
 
         realEncounterConfirmed = false
 
-        if Gui.auto_catch_test_mode(hud) then
-            return do_catch_sequence()
-        end
-
         if shinyvalue == 1 then
-            if Gui.auto_catch_enabled(hud) then
-                return do_catch_sequence()
-            else
-                print("Shiny found!!")
-                return true
-            end
+            print("Shiny found!!")
+            return true
         end
 
         if stopRequested then
