@@ -189,13 +189,14 @@ If the stats remain the same, the save state was not created correctly, and the 
 ### About the "True Randomness" Checkbox
 
 
-Off (default): fast, ~98.8% empirically-measured DV coverage. Plenty for shiny hunting - 8 valid combinations out of 65536, so a small coverage gap is very unlikely to exclude all of them.
+Off (default): fast, ~96.8% empirically-measured DV coverage. Plenty for shiny hunting - 8 valid combinations out of 65536, so a small coverage gap is very unlikely to exclude all of them.
 On: much slower (single delay of 65536+ frames instead of the fast split approach), but mathematically guarantees reaching every possible DV combination given enough time. Use this specifically when hunting a single unique target like 15/15/15/15 (Perfect DVs) or 0/0/0/0 (Perfect Negative DVs), where there's only one valid combination and the stakes of a coverage gap are much higher.
 
 Whether the fast "Off" mode happens to already cover a specific rare target like 15/15/15/15 depends on the individual save file - it might, or it might not, with no way to know in advance. "On" removes that uncertainty at the cost of speed.
 
 ## Fishing Module
 
+- Place any Pokémon with **Surf** learned from your party into a PC Box.
 - Automatically Handles Phone Calls and Other Interruptions (e.g. Egg Hatching)
 - put your fishing rod on the select button --> inventory --> fishing rod --> SEL
   
