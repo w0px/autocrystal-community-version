@@ -661,7 +661,7 @@ This result shows that, if a single row or column of trees is traversed, moving 
 
 ## Roadmap
 
-- [ ] Support for ROM Hacks Crystal Clear, Ultimate Crystal
+- [ ] Auto Catch for Crystal
 
 
 
